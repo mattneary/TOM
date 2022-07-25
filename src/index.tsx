@@ -153,14 +153,6 @@ export class TOM {
 export default function Tom({model}) {
   const [content, setContent] = React.useState<Content>(null)
   const contentLength = content && _.sumBy(contentToStrings(content), 'length')
-  const link: Content = content && [{
-    items: [{
-      type: 'link',
-      start: 0,
-      length: contentLength,
-      basis: content,
-    }],
-  }]
   return (
     <div className='pages'>
       <div
@@ -169,11 +161,17 @@ export default function Tom({model}) {
           if (ref && !ref.querySelector('article')) {
             setContent(model.content)
             model.render(ref)
+            ref.querySelector('article').addEventListener('paste', evt => {
+              const data = evt.clipboardData.getData('jerry')
+              console.log('data', data)
+              // TODO: implement paste
+              evt.preventDefault()
+            })
           }
         }}
         onKeyDown={evt => {
-          evt.preventDefault()
           if (evt.code === 'Backspace') {
+            evt.preventDefault()
             model.deleteSelection()
             setContent(model.content)
           }
@@ -183,11 +181,25 @@ export default function Tom({model}) {
           <h1>Man in Universe</h1>
         </header>
       </div>
-      <div className='page'>
+      <div
+        className='page'
+        ref={ref => {
+          if (ref) {
+            ref.addEventListener('copy', evt => {
+              const article = ref.querySelector('article')
+              if (!article) return
+              const sel = new Jerry(article).getSelection()
+              evt.clipboardData.setData('text/plain', sel.getContent())
+              evt.clipboardData.setData('jerry', [sel.start, sel.end].join('-'))
+              evt.preventDefault()
+            })
+          }
+        }}
+      >
         <header>
           <h1>Man in Universe</h1>
           <article>
-            {link && contentToStrings(link).map(text => <p>{text}</p>)}
+            {content && contentToStrings(content).map(text => <p>{text}</p>)}
           </article>
         </header>
       </div>
