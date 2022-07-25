@@ -1,5 +1,7 @@
 # TOM
 
+![tom](tom.png)
+
 Text Organization Model
 
 ## usage
