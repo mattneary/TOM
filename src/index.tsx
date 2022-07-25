@@ -3,16 +3,6 @@ import _ from 'lodash'
 import Jerry, {Address} from 'jerrymander'
 import './main.scss'
 
-function reactToDom(r) {
-  if (_.isString(r)) return document.createTextNode(r)
-  const elm = document.createElement(r.type)
-  const children = _.isArray(r.props.children) ? r.props.children : [r.props.children]
-  const otherProps = _.omit(r.props, 'children')
-  _.keys(otherProps).forEach(prop => elm.setAttribute(prop, otherProps[prop]))
-  children.forEach(c => elm.appendChild(reactToDom(c)))
-  return elm
-}
-
 type Entry = {type: 'entry', content: string, length: number}
 type Link = {type: 'link', start: number, length: number, basis: Content}
 type Block = {items: (Entry | Link)[]}
@@ -29,7 +19,7 @@ function offsetZip(xs: string[]): [number, string][] {
 }
 
 function linkText(link: Link): string[] {
-  const chunks = offsetZip(flatContent(link.basis))
+  const chunks = offsetZip(contentToStrings(link.basis))
   const startChunk = _.findLast(chunks, ([offset]) => offset <= link.start)
   const endChunk = _.findLast(chunks, ([offset]) => offset < link.start + link.length)
   const startIdx = chunks.indexOf(startChunk)
@@ -52,7 +42,7 @@ function linkText(link: Link): string[] {
   ]
 }
 
-function flatContent(content: Content): string[] {
+function contentToStrings(content: Content): string[] {
   return _.flatMap(content.map(({items}) => {
     let currentContent = ''
     let chunks = []
@@ -138,7 +128,7 @@ export class TOM {
       }
     }
 
-    const contentLength = _.sumBy(flatContent(this.content), 'length')
+    const contentLength = _.sumBy(contentToStrings(this.content), 'length')
     this.content = [{
       items: _.compact([
         sel.start && {
@@ -190,7 +180,7 @@ export default function Tom({model}) {
           <h1>Man in Universe</h1>
           <div className='byline'>Richard Buckminster Fuller, 1963</div>
           <article>
-            {content && flatContent(content).map(text => <p>{text}</p>)}
+            {content && contentToStrings(content).map(text => <p>{text}</p>)}
           </article>
         </header>
       </div>
