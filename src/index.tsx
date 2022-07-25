@@ -18,20 +18,60 @@ type Link = {type: 'link', start: number, length: number, basis: Content}
 type Block = {items: (Entry | Link)[]}
 type Content = Block[]
 
-function linkText(link: Link): string {
-  return flatContent(link.basis).substr(link.start, link.length)
+function offsetZip(xs: string[]): [number, string][] {
+  let offset = 0
+  let chunks = []
+  xs.forEach(x => {
+    chunks.push([offset, x])
+    offset += x.length
+  })
+  return chunks
 }
 
-function flatContent(content: Content): string {
-  return content.map(({items}) => {
-    return items.map(item => {
+function linkText(link: Link): string[] {
+  const chunks = offsetZip(flatContent(link.basis))
+  const startChunk = _.findLast(chunks, ([offset]) => offset <= link.start)
+  const endChunk = _.findLast(chunks, ([offset]) => offset < link.start + link.length)
+  const startIdx = chunks.indexOf(startChunk)
+  const endIdx = chunks.indexOf(endChunk)
+  if (startIdx === endIdx) {
+    const [offset, content] = startChunk
+    return [
+      ...(link.start === offset ? [''] : []),
+      content.substr(link.start - offset, link.length),
+    ]
+  }
+
+  const [startOffset, startContent] = startChunk
+  const [endOffset, endContent] = endChunk
+  return [
+    ...(link.start === startOffset ? [''] : []),
+    startContent.substr(link.start - startOffset),
+    ..._.map(chunks.slice(startIdx + 1, endIdx), 1),
+    endContent.substr(0, (link.start + link.length) - endOffset),
+  ]
+}
+
+function flatContent(content: Content): string[] {
+  return _.flatMap(content.map(({items}) => {
+    let currentContent = ''
+    let chunks = []
+    items.forEach(item => {
       if (item.type === 'link') {
-        return linkText(item)
+        const xs = linkText(item)
+        if (xs.length > 1) {
+          chunks.push(currentContent + xs[0])
+          chunks = [...chunks, ...xs.slice(1)]
+          currentContent = chunks.pop()
+        } else {
+          currentContent += xs[0]
+        }
       } else if (item.type === 'entry') {
-        return item.content
+        currentContent += item.content
       }
-    }).join('')
-  }).join('')
+    })
+    return currentContent ? [...chunks, currentContent] : chunks
+  }))
 }
 
 function contentToHtml(content: Content): Element {
@@ -42,7 +82,8 @@ function contentToHtml(content: Content): Element {
       if (item.type === 'entry') {
         p.appendChild(document.createTextNode(item.content))
       } else if (item.type === 'link') {
-        p.appendChild(document.createTextNode(linkText(item)))
+        const strs = linkText(item)
+        strs.forEach(str => p.appendChild(document.createTextNode(str)))
       }
     })
     article.appendChild(p)
@@ -51,35 +92,26 @@ function contentToHtml(content: Content): Element {
   return article
 }
 
-const TEXT_CONTENT = `
-Man, as we know him, is a comparative late-comer in the history of the Earth and tenuous film of life which its surface has supported. In certain respects he is one of the most fragile of living creatures—yet, in the manner of his explosive appearance on the scene, and the ways in which he has profoundly altered the environment within which he developed, he is the most powerful organism to have emerged so far.
-
-This ‘power’ to which we will often refer, (and indeed upon which this entire report is a commentary) is not visible physical power, but rather the wholly invisible power of the brain. Linnaeus, the eminent Swedish botanist, first gave the name *homo sapiens* to our present human strain. The wisdom (or “sapien”) referred to is not so developed in the traditional sense as we might desire, but as intellect or brain power it is awesomely demonstrable.
-
-Yet the difference between man and other organisms seems still only a matter of degree—of relative weight of brain, perhaps, and the number of its surface convolutions—but it is a marginal difference which is sufficient to alter significantly the way in which man has so far evolved. This difference has served to provide two main characteristics which set him apart from all other creatures. One is the ability to transmit his consciously accumulated knowledge from one generation to another and across many generations, and the other to externalise his organic functions into extent fabricated from his material environment—his tools. These features, combined, have enabled man, in spite of his relatively puny physical stature, to adapt himself to his environment so that he has been able to survive severe climatic and other changes, and to spread swiftly out into every corner of the Earth.
-
-His capacity to transcend the temporal limits of his own life span by communicating his thought and feelings through many generations has given him an unique ‘continuous’ quality. Though his physical body may be entirely changed through cell renewal many times in his life and eventually be dissolved into its constituent parts. In the sense referred to even the individual may be ‘continuous’, and the overlapping and interweaving of generations of communicating individuals make man, potentially, an organism which never sleeps, dies, or forgets …
-`
-
-const content: Content = TEXT_CONTENT.split('\n\n').map(x => ({
-  items: [{type: 'entry', content: x.trim(), length: x.length}],
-}))
-
 function mergeElms(a: Element, b: Element) {
   Array.from(b.childNodes).forEach(child => a.appendChild(child))
   b.parentNode.removeChild(b)
 }
 
-class TOM {
+export class TOM {
   root: Element
   content: Content
 
-  constructor(content: Content, node: Element) {
+  constructor(content: Content | string, node: Element = null) {
     this.root = node
-    this.content = content
+    this.content = _.isString(content)
+      ? content.split('\n\n').map(x => ({
+        items: [{type: 'entry', content: x, length: x.length}],
+      }))
+      : content
   }
 
-  render() {
+  render(node: Element) {
+    this.root = node
     this.root.appendChild(contentToHtml(this.content))
   }
 
@@ -102,7 +134,7 @@ class TOM {
       }
     }
 
-    const contentLength = flatContent(this.content).length
+    const contentLength = _.sumBy(flatContent(this.content), 'length')
     this.content = [{
       items: _.compact([
         sel.start && {
@@ -124,17 +156,14 @@ class TOM {
   }
 }
 
-export default function Tom() {
-  const tomRef = React.useRef()
-  const [contentRepr, setContentRepr] = React.useState(null)
-  console.log(contentRepr)
+export default function Tom({model}) {
+  const [content, setContent] = React.useState(null)
   return (
     <div className='pages'>
       <div className='page' ref={ref => {
-        if (ref && !tomRef.current) {
-          tomRef.current = new TOM(content, ref)
-          setContentRepr(content)
-          tomRef.current.render()
+        if (ref && !ref.querySelector('article')) {
+          setContent(model.content)
+          model.render(ref)
         }
       }}>
         <header>
@@ -142,8 +171,8 @@ export default function Tom() {
             <h1>Man in Universe</h1>
             <button
               onClick={evt => {
-                tomRef.current.deleteSelection()
-                setContentRepr(tomRef.current.content)
+                model.deleteSelection()
+                setContent(model.content)
               }}
             >Delete Selection</button>
           </div>
@@ -157,7 +186,7 @@ export default function Tom() {
           </div>
           <div className='byline'>Richard Buckminster Fuller, 1963</div>
           <article>
-            {contentRepr && <p>{flatContent(contentRepr)}</p>}
+            {content && flatContent(content).map(text => <p>{text}</p>)}
           </article>
         </header>
       </div>

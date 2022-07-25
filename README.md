@@ -5,8 +5,5 @@ Text Organization Model
 ## usage
 
 ```javascript
-<Tom
-  value={content: TomNode}
-  onChange={fn: (content: TomNode) => any}
-/>
+<Tom model={model: TOM} />
 ```
