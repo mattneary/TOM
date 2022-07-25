@@ -118,6 +118,10 @@ export class TOM {
   deleteSelection() {
     const article = this.root.querySelector('article')
     const sel = new Jerry(article).getSelection()
+    if (sel.start === sel.end) {
+      // TODO: implement normal backspace
+      return
+    }
     const atoms = sel.toAtoms()
     const first: Address = atoms[0]
     const last: Address = _.last(atoms)
@@ -160,30 +164,30 @@ export default function Tom({model}) {
   const [content, setContent] = React.useState(null)
   return (
     <div className='pages'>
-      <div className='page' ref={ref => {
-        if (ref && !ref.querySelector('article')) {
-          setContent(model.content)
-          model.render(ref)
-        }
-      }}>
+      <div
+        className='page'
+        ref={ref => {
+          if (ref && !ref.querySelector('article')) {
+            setContent(model.content)
+            model.render(ref)
+          }
+        }}
+        onKeyDown={evt => {
+          evt.preventDefault()
+          if (evt.code === 'Backspace') {
+            model.deleteSelection()
+            setContent(model.content)
+          }
+        }}
+      >
         <header>
-          <div className='headline'>
-            <h1>Man in Universe</h1>
-            <button
-              onClick={evt => {
-                model.deleteSelection()
-                setContent(model.content)
-              }}
-            >Delete Selection</button>
-          </div>
+          <h1>Man in Universe</h1>
           <div className='byline'>Richard Buckminster Fuller, 1963</div>
         </header>
       </div>
       <div className='page'>
         <header>
-          <div className='headline'>
-            <h1>Man in Universe</h1>
-          </div>
+          <h1>Man in Universe</h1>
           <div className='byline'>Richard Buckminster Fuller, 1963</div>
           <article>
             {content && flatContent(content).map(text => <p>{text}</p>)}
