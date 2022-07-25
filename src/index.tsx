@@ -151,7 +151,16 @@ export class TOM {
 }
 
 export default function Tom({model}) {
-  const [content, setContent] = React.useState(null)
+  const [content, setContent] = React.useState<Content>(null)
+  const contentLength = content && _.sumBy(contentToStrings(content), 'length')
+  const link: Content = content && [{
+    items: [{
+      type: 'link',
+      start: 0,
+      length: contentLength,
+      basis: content,
+    }],
+  }]
   return (
     <div className='pages'>
       <div
@@ -172,15 +181,13 @@ export default function Tom({model}) {
       >
         <header>
           <h1>Man in Universe</h1>
-          <div className='byline'>Richard Buckminster Fuller, 1963</div>
         </header>
       </div>
       <div className='page'>
         <header>
           <h1>Man in Universe</h1>
-          <div className='byline'>Richard Buckminster Fuller, 1963</div>
           <article>
-            {content && contentToStrings(content).map(text => <p>{text}</p>)}
+            {link && contentToStrings(link).map(text => <p>{text}</p>)}
           </article>
         </header>
       </div>
