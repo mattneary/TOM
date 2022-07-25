@@ -1,6 +1,6 @@
 # TOM
 
-![tom](tom.png)
+<img src="tom.png" width="200px" />
 
 Text Organization Model
 
