@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
-import Tom, {TOM} from './index'
+import App from './index'
 
 const content = `
 Man, as we know him, is a comparative late-comer in the history of the Earth and tenuous film of life which its surface has supported. In certain respects he is one of the most fragile of living creatures—yet, in the manner of his explosive appearance on the scene, and the ways in which he has profoundly altered the environment within which he developed, he is the most powerful organism to have emerged so far.
@@ -11,4 +11,4 @@ Yet the difference between man and other organisms seems still only a matter of 
 
 His capacity to transcend the temporal limits of his own life span by communicating his thought and feelings through many generations has given him an unique ‘continuous’ quality. Though his physical body may be entirely changed through cell renewal many times in his life and eventually be dissolved into its constituent parts. In the sense referred to even the individual may be ‘continuous’, and the overlapping and interweaving of generations of communicating individuals make man, potentially, an organism which never sleeps, dies, or forgets …
 `.trim()
-ReactDOM.render(<Tom model={new TOM(content)} />, document.body)
+ReactDOM.render(<App content={content} />, document.body)

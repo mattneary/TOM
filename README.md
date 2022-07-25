@@ -7,5 +7,5 @@ Text Organization Model
 ## usage
 
 ```javascript
-<Tom model={model: TOM} />
+<Tom model={model: TOM} onChange={(model: TOM) => any} />
 ```

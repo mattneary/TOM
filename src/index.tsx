@@ -105,12 +105,12 @@ export class TOM {
     this.root.appendChild(contentToHtml(this.content))
   }
 
-  deleteSelection() {
+  deleteSelection(): TOM {
     const article = this.root.querySelector('article')
     const sel = new Jerry(article).getSelection()
     if (sel.start === sel.end) {
       // TODO: implement normal backspace
-      return
+      return this
     }
     const atoms = sel.toAtoms()
     const first: Address = atoms[0]
@@ -128,8 +128,9 @@ export class TOM {
       }
     }
 
+    window.getSelection().empty()
     const contentLength = _.sumBy(contentToStrings(this.content), 'length')
-    this.content = [{
+    return new TOM([{
       items: _.compact([
         sel.start && {
           type: 'link',
@@ -144,65 +145,67 @@ export class TOM {
           basis: this.content,
         },
       ])
-    }]
-
-    window.getSelection().empty()
+    }], this.root)
   }
 }
 
-export default function Tom({model}) {
-  const [content, setContent] = React.useState<Content>(null)
-  const contentLength = content && _.sumBy(contentToStrings(content), 'length')
-  return (
-    <div className='pages'>
-      <div
-        className='page'
-        ref={ref => {
-          if (ref && !ref.querySelector('article')) {
-            setContent(model.content)
-            model.render(ref)
-            ref.querySelector('article').addEventListener('paste', evt => {
-              const data = evt.clipboardData.getData('jerry')
-              console.log('data', data)
-              // TODO: implement paste
-              evt.preventDefault()
-            })
-          }
-        }}
-        onKeyDown={evt => {
-          if (evt.code === 'Backspace') {
-            evt.preventDefault()
-            model.deleteSelection()
-            setContent(model.content)
-          }
-        }}
-      >
-        <header>
-          <h1>Man in Universe</h1>
-        </header>
-      </div>
-      <div
-        className='page'
-        ref={ref => {
-          if (ref) {
-            ref.addEventListener('copy', evt => {
-              const article = ref.querySelector('article')
-              if (!article) return
-              const sel = new Jerry(article).getSelection()
-              evt.clipboardData.setData('text/plain', sel.getContent())
-              evt.clipboardData.setData('jerry', [sel.start, sel.end].join('-'))
-              evt.preventDefault()
-            })
-          }
-        }}
-      >
+export function Tom({model, onChange = null, immutable = false}) {
+  if (immutable) {
+    return (
+      <div className='page'>
         <header>
           <h1>Man in Universe</h1>
           <article>
-            {content && contentToStrings(content).map(text => <p>{text}</p>)}
+            {contentToStrings(model.content).map(text => <p>{text}</p>)}
           </article>
         </header>
       </div>
+    )
+  }
+  return (
+    <div
+      className='page'
+      ref={ref => {
+        if (ref && !ref.querySelector('article')) {
+          model.render(ref)
+          const article = ref.querySelector('article')
+          article.addEventListener('paste', evt => {
+            const data = evt.clipboardData.getData('jerry')
+            console.log('data', data)
+            // TODO: implement paste
+            evt.preventDefault()
+          })
+          article.addEventListener('copy', evt => {
+            const article = ref.querySelector('article')
+            if (!article) return
+            const sel = new Jerry(article).getSelection()
+            evt.clipboardData.setData('text/plain', sel.getContent())
+            evt.clipboardData.setData('jerry', [sel.start, sel.end].join('-'))
+            evt.preventDefault()
+          })
+        }
+      }}
+      onKeyDown={evt => {
+        if (evt.code === 'Backspace') {
+          evt.preventDefault()
+          const newModel = model.deleteSelection()
+          onChange(newModel)
+        }
+      }}
+    >
+      <header>
+        <h1>Man in Universe</h1>
+      </header>
+    </div>
+  )
+}
+
+export default function App({content}) {
+  const [model, setModel] = React.useState(new TOM(content))
+  return (
+    <div className='pages'>
+      <Tom model={model} onChange={m => setModel(m)} />
+      <Tom model={model} immutable />
     </div>
   )
 }
