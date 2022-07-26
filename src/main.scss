@@ -18,7 +18,8 @@ h1 {
   margin: 0;
   font-family: sans-serif;
   font-weight: normal;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #4d4d4d;
+  color: #4d4d4d;
   padding: 5px 15px;
 }
 article {
@@ -30,4 +31,7 @@ article {
 }
 article p {
   white-space: pre-wrap;
+}
+.highlight {
+  background: lightblue;
 }

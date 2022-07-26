@@ -1,12 +1,7 @@
 import React from 'react'
 import _ from 'lodash'
-import Jerry, {Address} from 'jerrymander'
+import Jerry, * as jerry from 'jerrymander'
 import './main.scss'
-
-type Entry = {type: 'entry', content: string, length: number}
-type Link = {type: 'link', start: number, length: number, basis: Content}
-type Block = {items: (Entry | Link)[]}
-type Content = Block[]
 
 function offsetZip(xs: string[]): [number, string][] {
   let offset = 0
@@ -18,64 +13,65 @@ function offsetZip(xs: string[]): [number, string][] {
   return chunks
 }
 
-function linkText(link: Link): string[] {
-  const chunks = offsetZip(contentToStrings(link.basis))
-  const startChunk = _.findLast(chunks, ([offset]) => offset <= link.start)
-  const endChunk = _.findLast(chunks, ([offset]) => offset < link.start + link.length)
-  const startIdx = chunks.indexOf(startChunk)
-  const endIdx = chunks.indexOf(endChunk)
-  if (startIdx === endIdx) {
-    const [offset, content] = startChunk
-    return [
-      ...(link.start === offset ? [''] : []),
-      content.substr(link.start - offset, link.length),
-    ]
+class Address {
+  basis: Content
+  start: number
+  end: number
+  constructor(basis, start, end) {
+    this.basis = basis
+    this.start = start
+    this.end = end
   }
 
-  const [startOffset, startContent] = startChunk
-  const [endOffset, endContent] = endChunk
-  return [
-    ...(link.start === startOffset ? [''] : []),
-    startContent.substr(link.start - startOffset),
-    ..._.map(chunks.slice(startIdx + 1, endIdx), 1),
-    endContent.substr(0, (link.start + link.length) - endOffset),
-  ]
+  toJerry(root): jerry.Address {
+    return new jerry.Address(root, this.start, this.end)
+  }
 }
 
-function contentToStrings(content: Content): string[] {
-  return _.flatMap(content.map(({items}) => {
-    let currentContent = ''
-    let chunks = []
-    items.forEach(item => {
-      if (item.type === 'link') {
-        const xs = linkText(item)
-        if (xs.length > 1) {
-          chunks.push(currentContent + xs[0])
-          chunks = [...chunks, ...xs.slice(1)]
-          currentContent = chunks.pop()
-        } else {
-          currentContent += xs[0]
-        }
-      } else if (item.type === 'entry') {
-        currentContent += item.content
-      }
-    })
-    return currentContent ? [...chunks, currentContent] : chunks
-  }))
+class SplitString {
+  strs: string[]
+  length: number
+  constructor(strs: string[]) {
+    this.strs = strs
+    this.length = _.sumBy(strs, 'length')
+  }
+
+  deleteRange(start: number, end: number): SplitString {
+    const pairs = offsetZip(this.strs)
+    const startPair = _.findLast(pairs, ([offset]) => offset <= start)
+    const endPair = _.findLast(pairs, ([offset]) => offset < end)
+    const startIdx = pairs.indexOf(startPair)
+    const endIdx = pairs.indexOf(endPair)
+    const [startOffset, startStr] = startPair
+    const [endOffset, endStr] = endPair
+    if (startIdx === endIdx) {
+      return new SplitString([
+        ...this.strs.slice(0, startIdx),
+        startStr.substr(0, start - startOffset) + endStr.substr(end - startOffset),
+        ...this.strs.slice(endIdx + 1),
+      ])
+    }
+    return new SplitString([
+      ...this.strs.slice(0, startIdx),
+      startStr.substr(0, start - startOffset),
+      endStr.substr(end - endOffset),
+      ...this.strs.slice(endIdx + 1),
+    ])
+  }
+}
+
+type Link = {origin: Address, dest: Address}
+type Content = {blocks: SplitString, links: Link[]}
+
+function contentToStrings(content: Content): SplitString {
+  return content.blocks
 }
 
 function contentToHtml(content: Content): Element {
   const article = document.createElement('article')
-  content.forEach(({items}) => {
+  content.blocks.strs.forEach(content => {
     const p = document.createElement('p')
-    items.forEach(item => {
-      if (item.type === 'entry') {
-        p.appendChild(document.createTextNode(item.content))
-      } else if (item.type === 'link') {
-        const strs = linkText(item)
-        strs.forEach(str => p.appendChild(document.createTextNode(str)))
-      }
-    })
+    p.appendChild(document.createTextNode(content))
     article.appendChild(p)
   })
   article.setAttribute('contentEditable', 'true')
@@ -94,9 +90,7 @@ export class TOM {
   constructor(content: Content | string, node: Element = null) {
     this.root = node
     this.content = _.isString(content)
-      ? content.split('\n\n').map(x => ({
-        items: [{type: 'entry', content: x, length: x.length}],
-      }))
+      ? { blocks: new SplitString(content.split('\n\n')), links: [] }
       : content
   }
 
@@ -113,8 +107,8 @@ export class TOM {
       return this
     }
     const atoms = sel.toAtoms()
-    const first: Address = atoms[0]
-    const last: Address = _.last(atoms)
+    const first: jerry.Address = atoms[0]
+    const last: jerry.Address = _.last(atoms)
     const parents = _.map(atoms, 'root.parentNode')
     const firstParent = first.root.parentNode
     const lastParent = last.root.parentNode
@@ -129,35 +123,40 @@ export class TOM {
     }
 
     window.getSelection().empty()
-    const contentLength = _.sumBy(contentToStrings(this.content), 'length')
-    return new TOM([{
-      items: _.compact([
-        sel.start && {
-          type: 'link',
-          start: 0,
-          length: sel.start,
-          basis: this.content,
-        },
-        sel.end !== contentLength && {
-          type: 'link',
-          start: sel.end,
-          length: contentLength - sel.end,
-          basis: this.content,
-        },
-      ])
-    }], this.root)
+    const contentLength = contentToStrings(this.content).length
+    const newModel = new TOM({
+      blocks: this.content.blocks.deleteRange(sel.start, sel.end),
+      links: [],
+    }, this.root)
+    newModel.content.links = _.compact([
+      sel.start && {
+        origin: new Address(newModel.content, 0, sel.start),
+        dest: new Address(this.content, 0, sel.start),
+      },
+      sel.end !== contentLength && {
+        origin: new Address(newModel.content, sel.start, contentLength - (sel.end - sel.start)),
+        dest: new Address(this.content, sel.end, contentLength),
+      },
+    ])
+    return newModel
   }
 }
 
-export function Tom({model, onChange = null, immutable = false}) {
+export function Tom({model, title = '', links = [], onChange = null, immutable = false}) {
   if (immutable) {
     return (
-      <div className='page'>
+      <div
+        className='page'
+        ref={ref => {
+          if (ref && !ref.querySelector('article')) {
+            model.render(ref)
+            const article = ref.querySelector('article')
+            links.forEach(x => x.toJerry(article).highlight())
+          }
+        }}
+      >
         <header>
-          <h1>Man in Universe</h1>
-          <article>
-            {contentToStrings(model.content).map(text => <p>{text}</p>)}
-          </article>
+          <h1>{title || <>&nbsp;</>}</h1>
         </header>
       </div>
     )
@@ -194,18 +193,32 @@ export function Tom({model, onChange = null, immutable = false}) {
       }}
     >
       <header>
-        <h1>Man in Universe</h1>
+        <h1>{title}</h1>
       </header>
     </div>
   )
 }
 
 export default function App({content}) {
+  const [version, setVersion] = React.useState(0)
   const [model, setModel] = React.useState(new TOM(content))
+  const basis = _.find(model.content.links, 'dest.basis')?.dest?.basis
   return (
     <div className='pages'>
-      <Tom model={model} onChange={m => setModel(m)} />
-      <Tom model={model} immutable />
+      <Tom
+        title="Current Version"
+        model={model}
+        onChange={m => {
+          setModel(m)
+          setVersion(x => x + 1)
+        }}
+      />
+      {basis && <Tom
+        key={version}
+        model={new TOM(basis)}
+        links={_.map(model.content.links, 'dest')}
+        immutable
+      />}
     </div>
   )
 }
