@@ -87,8 +87,7 @@ class SplitString {
     }
     return new SplitString([
       ...this.strs.slice(0, startIdx),
-      startStr.substr(0, start - startOffset),
-      endStr.substr(end - endOffset),
+      startStr.substr(0, start - startOffset) + endStr.substr(end - endOffset),
       ...this.strs.slice(endIdx + 1),
     ])
   }
