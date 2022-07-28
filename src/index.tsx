@@ -192,7 +192,7 @@ export class TOM {
     const atoms = sel.toAtoms()
     const first: jerry.Address = atoms[0]
     const last: jerry.Address = _.last(atoms)
-    const parents = _.map(atoms, 'root.parentNode')
+    const parents = _.uniq(_.map(atoms, 'root.parentNode'))
     const firstParent = first.root.parentNode
     const lastParent = last.root.parentNode
     atoms.forEach(atom => atom.root.parentNode.removeChild(atom.root))
@@ -244,7 +244,7 @@ export class TOM {
         dest: new Address(this.content, 0, sel.start),
       },
       sel.end !== contentLength && {
-        origin: new Address(newModel.content, sel.start + 1, contentLength),
+        origin: new Address(newModel.content, sel.start + 1, contentLength + 1),
         dest: new Address(this.content, sel.start, contentLength),
       },
     ])
@@ -261,6 +261,7 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
           if (ref && !ref.querySelector('article')) {
             model.render(ref)
             const article = ref.querySelector('article')
+            article.setAttribute('contentEditable', false)
             links.forEach(x => x.toJerry(article).highlight())
           }
         }}
@@ -315,24 +316,62 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
   )
 }
 
+function composeLinks2({origin: originA, dest: destB}, {origin: originB, dest: destC}) {
+  const b_to_c = b => b - originB.start + destC.start
+  const c_to_b = c => c - destC.start + originB.start
+  const b_to_a = b => b - destB.start + originA.start
+  const c_to_a = c => b_to_a(c_to_b(c))
+  const destFull = new Address(destC.basis, b_to_c(destB.start), b_to_c(destB.end))
+  if (destFull.start <= destC.start && destFull.end <= destC.start) return null
+  if (destFull.start >= destC.end && destFull.end >= destC.end) return null
+  const dest = new Address(
+    destC.basis,
+    Math.max(destC.start, destFull.start),
+    Math.min(destC.end, destFull.end)
+  )
+  const origin = new Address(originA.basis, c_to_a(dest.start), c_to_a(dest.end))
+  return {origin, dest}
+}
+
+function composeLinks(abs, bcs) {
+  // TODO: can maybe do more efficiently than enumerating all pairs
+  const pairs = _.flatMap(abs, ab => bcs.map(bc => composeLinks2(ab, bc)))
+  return _.compact(pairs)
+}
+
+function getHistory(content) {
+  const basis = _.find(content.links, 'dest.basis')?.dest?.basis
+  return [content, ...(basis ? getHistory(basis) : [])]
+}
+
 export default function App({content}) {
   const [version, setVersion] = React.useState(0)
   const [model, setModel] = React.useState(new TOM(content))
-  const basis = _.find(model.content.links, 'dest.basis')?.dest?.basis
+  const history = getHistory(model.content)
+  const basis = history[1]
+  const bbasis = history[2]
+  const root = _.last(history)
   return (
     <div className='pages'>
       <Tom
-        title="Current Version"
+        title={'Man in Universe' + (basis ? ' | Edited' : '')}
         model={model}
         onChange={m => {
           setModel(m)
           setVersion(x => x + 1)
         }}
       />
-      {basis && <Tom
+      {/*basis && <Tom
         key={version}
         model={new TOM(basis)}
         links={_.map(model.content.links, 'dest')}
+        immutable
+      />*/}
+      {history.length > 1 && <Tom
+        key={`${version}^`}
+        title="Man in Universe | Original"
+        model={new TOM(root)}
+        links={_.map(_.initial(history).map(x => x.links).reduce(composeLinks), 'dest')}
         immutable
       />}
     </div>
