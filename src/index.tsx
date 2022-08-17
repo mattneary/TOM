@@ -574,9 +574,11 @@ export default function App({content}) {
   const history: Content[] = getHistory(model.content)
   const version = model.content.blocks.id
   const root = history.find(x => x.blocks.id === comparisonVersion)
-  const links = history.length > 1 && _.initial(history).map(x => x.links).reduce((a, b) => a.compose(b)).range()
+  const composed = history.length > 1 && _.initial(history).map(x => x.links).reduce((a, b) => a.compose(b))
+  const outboundLinks = composed && composed.range().filter(x => x.basis === root)
+  const inboundLinks = composed && composed.preimage(outboundLinks)
   console.log(model.content.links.toString())
-  console.log(links.toString())
+  console.log(outboundLinks.toString())
   return (
     <div className='pages'>
       <Tom
@@ -587,15 +589,16 @@ export default function App({content}) {
           setVersion(x => x + 1)
         }}
         setEditing={setEditing}
-        immutable={!editing}
-        key={!editing ? `${version}vs${comparisonVersion}` : 'editor'}
+        immutable={!editing || comparisonVersion}
+        links={comparisonVersion ? inboundLinks : []}
+        key={`${editing}-${comparisonVersion}`}
       />
       {comparisonVersion
         ? <Tom
-          key={`${comparisonVersion}`}
+          key={comparisonVersion}
           title={`Man in Universe (${comparisonVersion})`}
           model={new TOM(root)}
-          links={links.filter(x => x.basis === root)}
+          links={outboundLinks}
           onClose={() => setComparisonVersion(null)}
           immutable
         />
