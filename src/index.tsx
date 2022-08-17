@@ -23,21 +23,189 @@ class Address {
     this.end = end
   }
 
+  toString(): string {
+    return this.basis.blocks.id + ':' + [this.start, this.end].join('-')
+  }
+
   toJerry(root): jerry.Address {
     return new jerry.Address(root, this.start, this.end)
+  }
+
+  intersect(otherAddress: Address): Address {
+    if (this.basis !== otherAddress.basis) return null
+    const implied = new Address(
+      this.basis,
+      Math.max(this.start, otherAddress.start),
+      Math.min(this.end, otherAddress.end)
+    )
+    const isEmpty = implied.end <= implied.start
+    return isEmpty ? null : implied
+  }
+
+  touching(otherAddress: Address): boolean {
+    if (this.basis !== otherAddress.basis) return false
+    if (this.intersect(otherAddress)) return true
+    if (this.start === otherAddress.end || otherAddress.start === this.end) return true
+    return false
+  }
+
+  sameBasis(otherAddress: Address) {
+    return this.basis === otherAddress.basis
+  }
+
+  diff2(otherAddress: Address): Address[] {
+    if (this.basis !== otherAddress.basis) return [this]
+    if (!this.intersect(otherAddress)) return [this]
+    const startsAfter = otherAddress.start > this.start
+    const endsBefore = otherAddress.end < this.end
+    if (endsBefore && startsAfter) {
+      return [
+        new Address(this.basis, this.start, otherAddress.start),
+        new Address(this.basis, otherAddress.end, this.end),
+      ]
+    }
+    if (startsAfter) return [new Address(this.basis, this.start, otherAddress.start)]
+    if (endsBefore) return [new Address(this.basis, otherAddress.end, this.end)]
+    return []
+  }
+}
+
+function diffAddresses(xs: Address[], ys: Address[]): Address[] {
+  if (_.isEmpty(xs)) return []
+  if (_.isEmpty(ys)) return xs
+  if (xs.length === 1) return diffAddresses(xs[0].diff2(ys[0]), _.tail(ys))
+  return [...diffAddresses([xs[0]], ys), ...diffAddresses(_.tail(xs), ys)]
+}
+
+function sortAddresses(addrs: Address[]): Address[] {
+  const bases = _.map(addrs, 'basis')
+  return _.orderBy(addrs, [x => bases.indexOf(x.basis), 'start'], ['asc', 'asc'])
+}
+
+function normalizeAddresses(addrs: Address[]): Address[] {
+  let grouped = new Map<Content, Address[]>()
+  const sorted = sortAddresses(addrs)
+  sorted.forEach(addr => {
+    grouped.set(addr.basis, [...(grouped.get(addr.basis) || []), addr])
+  })
+  return _.flatMap(Array.from(grouped.entries()), ([b, xs]: [any, Address[]]) => {
+    return xs.reduce((a, x) => {
+      if (_.isEmpty(a)) return [x]
+      if (_.last(a).touching(x)) {
+        const y = _.last(a)
+        return [..._.initial(a), new Address(y.basis, Math.min(x.start, y.start), Math.max(x.end, y.end))]
+      }
+      return [...a, x]
+    }, [])
+  })
+}
+
+class Link {
+  origin: Address
+  dest: Address
+  constructor(origin: Address, dest: Address) {
+    this.origin = origin
+    this.dest = dest
+  }
+
+  toString(): string {
+    return [this.origin.toString(), this.dest.toString()].join(' -> ')
+  }
+
+  invert() {
+    return new Link(this.dest, this.origin)
+  }
+
+  translate(point: number): number {
+    return point - this.origin.start + this.dest.start
+  }
+
+  translateI(addr: Address): Address {
+    if (this.origin.basis !== addr.basis) return null
+    const extrapolate = new Address(this.dest.basis, this.translate(addr.start), this.translate(addr.end))
+    return extrapolate.intersect(this.dest)
+  }
+
+  partialI(addr: Address): Link {
+    const translated = this.translateI(addr)
+    return translated ? new Link(addr, translated) : null
+  }
+}
+
+class LinkSet {
+  links: Link[]
+  constructor(links: Link[]) {
+    this.links = _.compact(links)
+  }
+
+  isEmpty(): boolean {
+    return _.isEmpty(this.links)
+  }
+
+  toString(): string {
+    return this.links.map(x => x.toString()).join('\n')
+  }
+
+  invert(): LinkSet {
+    return new LinkSet(this.links.map(x => x.invert()))
+  }
+
+  image(addrs: Address[]): Address[] {
+    return normalizeAddresses(_.compact(_.flatMap(this.links, link =>
+      _.flatMap(addrs, addr => link.translateI(addr))
+    )))
+  }
+
+  preimage(addrs: Address[]): Address[] {
+    return this.invert().image(addrs)
+  }
+
+  domain(): Address[] {
+    return normalizeAddresses(_.map(this.links, 'origin'))
+  }
+
+  range(): Address[] {
+    return normalizeAddresses(_.map(this.links, 'dest'))
+  }
+
+  partial(addr: Address): LinkSet {
+    const overlapping = this.links.filter(link => link.origin.intersect(addr))
+    return new LinkSet(overlapping.map(link => link.partialI(addr)))
+  }
+
+  prism(otherLinkSet: LinkSet, addr: Address): LinkSet {
+    const forwardLinks = this.partial(addr).links
+    const backwardLinks = otherLinkSet.invert().partial(addr).links
+    return new LinkSet(_.flatMap(forwardLinks, forward =>
+      _.flatMap(backwardLinks, backward => new Link(backward.dest, forward.dest))
+    ))
+  }
+
+  compose(otherLinkSet: LinkSet): LinkSet {
+    const longI = otherLinkSet.image(this.range())
+    const prelongs = otherLinkSet.preimage(longI)
+    const shortI = diffAddresses(this.range(), prelongs)
+    const preshorts = this.preimage(shortI)
+    const shorts = _.flatMap(preshorts, addr => this.partial(addr).links)
+    const longs = _.flatMap(prelongs, addr => otherLinkSet.prism(this, addr).links)
+    return new LinkSet([...shorts, ...longs])
   }
 }
 
 type Direction = 'left' | 'right'
+type Pair = [number, string]
+
 class SplitString {
+  id: string
   strs: string[]
   length: number
   constructor(strs: string[]) {
+    this.id = _.uniqueId('content-')
     this.strs = strs
     this.length = _.sumBy(strs, 'length')
   }
 
-  getPair(strIndex: number, bias: Direction = 'left'): [number, string] {
+  getPair(strIndex: number, bias: Direction = 'left'): [Pair[], Pair] {
     const pairs = offsetZip(this.strs)
     return [
       pairs,
@@ -48,6 +216,8 @@ class SplitString {
   }
 
   insertChar(start: number, c: string, bias: Direction = 'left'): SplitString {
+    // TODO: need to support the case when cursor is in a new, blank block
+    // might involve having bias = neither
     const [pairs, startPair] = this.getPair(start, bias)
     const startIdx = pairs.indexOf(startPair)
     const [startOffset, startStr] = startPair
@@ -91,10 +261,24 @@ class SplitString {
       ...this.strs.slice(endIdx + 1),
     ])
   }
+
+  readRange(start: number, end: number): string {
+    const pairs = offsetZip(this.strs)
+    const startPair = _.findLast(pairs, ([offset]) => offset <= start)
+    const endPair = _.findLast(pairs, ([offset]) => offset < end)
+    const startIdx = pairs.indexOf(startPair)
+    const endIdx = pairs.indexOf(endPair)
+    const [startOffset, startStr] = startPair
+    const [endOffset, endStr] = endPair
+    if (startIdx === endIdx) {
+      return startStr.substr(start - startOffset, end - startOffset)
+    }
+    // TODO: I believe this misses the case of spanning some intervening blocks
+    return startStr.substr(start - startOffset) + endStr.substr(0, end - endOffset)
+  }
 }
 
-type Link = {origin: Address, dest: Address}
-type Content = {blocks: SplitString, links: Link[]}
+type Content = {blocks: SplitString, links: LinkSet}
 
 function contentToStrings(content: Content): SplitString {
   return content.blocks
@@ -123,7 +307,7 @@ export class TOM {
   constructor(content: Content | string, node: Element = null) {
     this.root = node
     this.content = _.isString(content)
-      ? { blocks: new SplitString(content.split('\n\n')), links: [] }
+      ? { blocks: new SplitString(content.split('\n\n')), links: new LinkSet([]) }
       : content
   }
 
@@ -140,17 +324,17 @@ export class TOM {
       const contentLength = contentToStrings(this.content).length
       const newModel = new TOM({
         blocks: this.content.blocks.backspace(sel.start),
-        links: [],
+        links: new LinkSet([]),
       }, this.root)
-      newModel.content.links = _.compact([
-        {
-          origin: new Address(newModel.content, 0, sel.start - 1),
-          dest: new Address(this.content, 0, sel.start - 1),
-        },
-        {
-          origin: new Address(newModel.content, sel.start - 1, contentLength - 1),
-          dest: new Address(this.content, sel.start, contentLength),
-        },
+      newModel.content.links = new LinkSet([
+        new Link(
+          new Address(newModel.content, 0, sel.start - 1),
+          new Address(this.content, 0, sel.start - 1)
+        ),
+        new Link(
+          new Address(newModel.content, sel.start - 1, contentLength - 1),
+          new Address(this.content, sel.start, contentLength)
+        ),
       ])
       return newModel
     }
@@ -168,13 +352,13 @@ export class TOM {
         formerPair[1] + latterPair[1],
         ...this.content.blocks.strs.slice(latterIdx + 1),
       ]),
-      links: [],
+      links: new LinkSet([]),
     }, this.root)
-    newModel.content.links = _.compact([
-      {
-        origin: new Address(newModel.content, 0, contentLength),
-        dest: new Address(this.content, 0, contentLength),
-      },
+    newModel.content.links = new LinkSet([
+      new Link(
+        new Address(newModel.content, 0, contentLength),
+        new Address(this.content, 0, contentLength)
+      ),
     ])
     return newModel
   }
@@ -209,17 +393,17 @@ export class TOM {
     const contentLength = contentToStrings(this.content).length
     const newModel = new TOM({
       blocks: this.content.blocks.deleteRange(sel.start, sel.end),
-      links: [],
+      links: new LinkSet([]),
     }, this.root)
-    newModel.content.links = _.compact([
-      sel.start && {
-        origin: new Address(newModel.content, 0, sel.start),
-        dest: new Address(this.content, 0, sel.start),
-      },
-      sel.end !== contentLength && {
-        origin: new Address(newModel.content, sel.start, contentLength - (sel.end - sel.start)),
-        dest: new Address(this.content, sel.end, contentLength),
-      },
+    newModel.content.links = new LinkSet([
+      sel.start && new Link(
+        new Address(newModel.content, 0, sel.start),
+        new Address(this.content, 0, sel.start)
+      ),
+      sel.end !== contentLength && new Link(
+        new Address(newModel.content, sel.start, contentLength - (sel.end - sel.start)),
+        new Address(this.content, sel.end, contentLength)
+      ),
     ])
     return newModel
   }
@@ -236,27 +420,60 @@ export class TOM {
     const contentLength = contentToStrings(this.content).length
     const newModel = new TOM({
       blocks: this.content.blocks.insertChar(sel.start, c, sel.bias),
-      links: [],
+      links: new LinkSet([]),
     }, this.root)
-    newModel.content.links = _.compact([
-      sel.start && {
-        origin: new Address(newModel.content, 0, sel.start),
-        dest: new Address(this.content, 0, sel.start),
-      },
-      sel.end !== contentLength && {
-        origin: new Address(newModel.content, sel.start + 1, contentLength + 1),
-        dest: new Address(this.content, sel.start, contentLength),
-      },
+    newModel.content.links = new LinkSet([
+      sel.start && new Link(
+        new Address(newModel.content, 0, sel.start),
+        new Address(this.content, 0, sel.start)
+      ),
+      sel.end !== contentLength && new Link(
+        new Address(newModel.content, sel.start + 1, contentLength + 1),
+        new Address(this.content, sel.start, contentLength)
+      ),
+    ])
+    return newModel
+  }
+
+  insertReference(basis: Content, start: number, end: number): TOM {
+    const article = this.root.querySelector('article')
+    const j = new Jerry(article)
+    const sel = j.getSelection()
+    if (sel.start !== sel.end) {
+      // TODO: implement insert/delete
+      return this
+    }
+
+    const refText = basis.blocks.readRange(start, end)
+    const contentLength = contentToStrings(this.content).length
+    const newModel = new TOM({
+      blocks: this.content.blocks.insertChar(sel.start, refText, sel.bias),
+      links: new LinkSet([]),
+    }, this.root)
+    newModel.content.links = new LinkSet([
+      sel.start && new Link(
+        new Address(newModel.content, 0, sel.start),
+        new Address(this.content, 0, sel.start)
+      ),
+      new Link(
+        new Address(newModel.content, sel.start, sel.start + (end - start)),
+        new Address(basis, start, end)
+      ),
+      sel.end !== contentLength && new Link(
+        new Address(newModel.content, sel.start + refText.length, contentLength + refText.length),
+        new Address(this.content, sel.start, contentLength)
+      ),
     ])
     return newModel
   }
 }
 
-export function Tom({model, title = '', links = [], onChange = null, immutable = false}) {
+export function Tom({model, title = '', links = [], onChange = null, immutable = false, setEditing = null}) {
   if (immutable) {
     return (
       <div
         className='page'
+        key="immutable"
         ref={ref => {
           if (ref && !ref.querySelector('article')) {
             model.render(ref)
@@ -265,6 +482,7 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
             links.forEach(x => x.toJerry(article).highlight())
           }
         }}
+        onClick={() => setEditing && setEditing(true)}
       >
         <header>
           <h1>{title || <>&nbsp;</>}</h1>
@@ -275,6 +493,7 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
   return (
     <div
       className='page'
+      key="mutable"
       ref={ref => {
         if (ref && !ref.querySelector('article')) {
           model.render(ref)
@@ -290,7 +509,7 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
             if (!article) return
             const sel = new Jerry(article).getSelection()
             evt.clipboardData.setData('text/plain', sel.getContent())
-            evt.clipboardData.setData('jerry', [sel.start, sel.end].join('-'))
+            evt.clipboardData.setData('jerry', model.content.blocks.id + ':' + [sel.start, sel.end].join('-'))
             evt.preventDefault()
           })
         }
@@ -306,6 +525,8 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
           const key = specialKeys[evt.code] || evt.key
           const newModel = model.insertChar(key)
           onChange(newModel)
+        } else if (evt.code === 'Escape') {
+          if (setEditing) setEditing(false)
         }
       }}
     >
@@ -316,62 +537,37 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
   )
 }
 
-function composeLinks2({origin: originA, dest: destB}, {origin: originB, dest: destC}) {
-  const b_to_c = b => b - originB.start + destC.start
-  const c_to_b = c => c - destC.start + originB.start
-  const b_to_a = b => b - destB.start + originA.start
-  const c_to_a = c => b_to_a(c_to_b(c))
-  const destFull = new Address(destC.basis, b_to_c(destB.start), b_to_c(destB.end))
-  if (destFull.start <= destC.start && destFull.end <= destC.start) return null
-  if (destFull.start >= destC.end && destFull.end >= destC.end) return null
-  const dest = new Address(
-    destC.basis,
-    Math.max(destC.start, destFull.start),
-    Math.min(destC.end, destFull.end)
-  )
-  const origin = new Address(originA.basis, c_to_a(dest.start), c_to_a(dest.end))
-  return {origin, dest}
-}
-
-function composeLinks(abs, bcs) {
-  // TODO: can maybe do more efficiently than enumerating all pairs
-  const pairs = _.flatMap(abs, ab => bcs.map(bc => composeLinks2(ab, bc)))
-  return _.compact(pairs)
-}
-
 function getHistory(content) {
-  const basis = _.find(content.links, 'dest.basis')?.dest?.basis
+  const basis = _.find(content.links.links, 'dest.basis')?.dest?.basis
   return [content, ...(basis ? getHistory(basis) : [])]
 }
 
 export default function App({content}) {
   const [version, setVersion] = React.useState(0)
   const [model, setModel] = React.useState(new TOM(content))
-  const history = getHistory(model.content)
-  const basis = history[1]
-  const bbasis = history[2]
+  const [editing, setEditing] = React.useState(true)
+  const history: Content[] = getHistory(model.content)
   const root = _.last(history)
+  const links = history.length > 1 && _.initial(history).map(x => x.links).reduce((a, b) => a.compose(b)).range()
+  console.log(model.content.links.toString())
+  console.log(links.toString())
   return (
     <div className='pages'>
       <Tom
-        title={'Man in Universe' + (basis ? ' | Edited' : '')}
+        title={'Man in Universe' + (history.length > 1 ? ' | Edited' : '')}
         model={model}
         onChange={m => {
           setModel(m)
           setVersion(x => x + 1)
         }}
+        setEditing={setEditing}
+        immutable={!editing}
       />
-      {/*basis && <Tom
-        key={version}
-        model={new TOM(basis)}
-        links={_.map(model.content.links, 'dest')}
-        immutable
-      />*/}
       {history.length > 1 && <Tom
         key={`${version}^`}
         title="Man in Universe | Original"
         model={new TOM(root)}
-        links={_.map(_.initial(history).map(x => x.links).reduce(composeLinks), 'dest')}
+        links={links.filter(x => x.basis === root)}
         immutable
       />}
     </div>
