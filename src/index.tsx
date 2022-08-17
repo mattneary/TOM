@@ -209,18 +209,24 @@ class SplitString {
     const pairs = offsetZip(this.strs)
     return [
       pairs,
-      bias === 'left'
+      bias === 'left' || bias === 'neither'
         ? _.findLast(pairs, ([offset]) => offset < strIndex)
         : _.findLast(pairs, ([offset]) => offset <= strIndex),
     ]
   }
 
   insertChar(start: number, c: string, bias: Direction = 'left'): SplitString {
-    // TODO: need to support the case when cursor is in a new, blank block
-    // might involve having bias = neither
     const [pairs, startPair] = this.getPair(start, bias)
     const startIdx = pairs.indexOf(startPair)
     const [startOffset, startStr] = startPair
+    if (bias === 'neither') {
+      // the case when cursor is in a new, blank block
+      return new SplitString([
+        ...this.strs.slice(0, startIdx + 1),
+        c,
+        ...this.strs.slice(startIdx + 1),
+      ])
+    }
     return new SplitString([
       ...this.strs.slice(0, startIdx),
       startStr.substr(0, start - startOffset) + c + startStr.substr(start - startOffset),
