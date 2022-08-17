@@ -500,9 +500,16 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
           const article = ref.querySelector('article')
           article.addEventListener('paste', evt => {
             const data = evt.clipboardData.getData('jerry')
-            console.log('data', data)
-            // TODO: implement paste
-            evt.preventDefault()
+            const [basisId, range] = data.split(':')
+            const [start, end] = range.split('-').map(x => +x)
+            if (model.content.blocks.id === basisId) {
+              console.log('local reference', data)
+              const newModel = model.insertReference(model.content, start, end)
+              onChange(newModel)
+            } else {
+              // TODO: implement paste for other cases
+              evt.preventDefault()
+            }
           })
           article.addEventListener('copy', evt => {
             const article = ref.querySelector('article')
