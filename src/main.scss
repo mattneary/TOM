@@ -4,23 +4,45 @@ body {
 }
 .pages {
   display: flex;
+  height: 100vh;
 }
 .page {
   max-width: 500px;
   border-right: 1px solid #333;
   border-bottom: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  article {
+    flex: 1;
+    overflow: scroll;
+  }
 }
 .highlight {
   background: yellow;
 }
+header {
+  border-bottom: 1px solid #4d4d4d;
+  color: #4d4d4d;
+  display: flex;
+  flex-direction: row;
+  .action {
+    padding: 5px;
+    cursor: pointer;
+    &:hover {
+      background: #eee;
+    }
+  }
+  .action:last-child {
+    margin-right: 10px;
+  }
+}
 h1 {
+  padding: 5px 15px;
+  flex: 1;
   font-size: 1em;
   margin: 0;
   font-family: sans-serif;
   font-weight: normal;
-  border-bottom: 1px solid #4d4d4d;
-  color: #4d4d4d;
-  padding: 5px 15px;
 }
 article {
   outline: none;
@@ -34,4 +56,24 @@ article p {
 }
 .highlight {
   background: lightblue;
+}
+
+.versions {
+  width: 200px;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  .column {
+    flex: 1;
+    overflow: scroll;
+  }
+  .version {
+    &:first-of-type {
+      padding-top: 1em;
+    }
+    padding: 4px 15px;
+    &.disabled {
+      color: #aaa;
+    }
+  }
 }

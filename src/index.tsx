@@ -1,6 +1,7 @@
 import React from 'react'
 import _ from 'lodash'
 import Jerry, * as jerry from 'jerrymander'
+import cx from 'classnames'
 import './main.scss'
 
 function offsetZip(xs: string[]): [number, string][] {
@@ -192,7 +193,7 @@ class LinkSet {
   }
 }
 
-type Direction = 'left' | 'right'
+type Direction = 'left' | 'right' | 'neither'
 type Pair = [number, string]
 
 class SplitString {
@@ -474,7 +475,15 @@ export class TOM {
   }
 }
 
-export function Tom({model, title = '', links = [], onChange = null, immutable = false, setEditing = null}) {
+export function Tom({
+  model,
+  title = '',
+  links = [],
+  onChange = null,
+  immutable = false,
+  setEditing = null,
+  onClose = null,
+}) {
   if (immutable) {
     return (
       <div
@@ -492,6 +501,9 @@ export function Tom({model, title = '', links = [], onChange = null, immutable =
       >
         <header>
           <h1>{title || <>&nbsp;</>}</h1>
+          {onClose && (
+            <div className="action" onClick={() => onClose()}>&times;</div>
+          )}
         </header>
       </div>
     )
@@ -556,18 +568,19 @@ function getHistory(content) {
 }
 
 export default function App({content}) {
-  const [version, setVersion] = React.useState(0)
   const [model, setModel] = React.useState(new TOM(content))
   const [editing, setEditing] = React.useState(true)
+  const [comparisonVersion, setComparisonVersion] = React.useState(null)
   const history: Content[] = getHistory(model.content)
-  const root = _.last(history)
+  const version = model.content.blocks.id
+  const root = history.find(x => x.blocks.id === comparisonVersion)
   const links = history.length > 1 && _.initial(history).map(x => x.links).reduce((a, b) => a.compose(b)).range()
   console.log(model.content.links.toString())
   console.log(links.toString())
   return (
     <div className='pages'>
       <Tom
-        title={'Man in Universe' + (history.length > 1 ? ' | Edited' : '')}
+        title={`Man in Universe (${version})`}
         model={model}
         onChange={m => {
           setModel(m)
@@ -575,14 +588,31 @@ export default function App({content}) {
         }}
         setEditing={setEditing}
         immutable={!editing}
+        key={!editing ? `${version}vs${comparisonVersion}` : 'editor'}
       />
-      {history.length > 1 && <Tom
-        key={`${version}^`}
-        title="Man in Universe | Original"
-        model={new TOM(root)}
-        links={links.filter(x => x.basis === root)}
-        immutable
-      />}
+      {comparisonVersion
+        ? <Tom
+          key={`${comparisonVersion}`}
+          title={`Man in Universe (${comparisonVersion})`}
+          model={new TOM(root)}
+          links={links.filter(x => x.basis === root)}
+          onClose={() => setComparisonVersion(null)}
+          immutable
+        />
+        : <div className="versions">
+          <header><h1>Versions</h1></header>
+          <div className="column">
+            {history.map(content => {
+              const id = content.blocks.id
+              return (
+                <div
+                  className={cx('version', id === version && 'disabled')}
+                  onClick={() => id !== version && setComparisonVersion(id)}
+                >{id}</div>
+              )
+            })}
+          </div>
+        </div>}
     </div>
   )
 }
