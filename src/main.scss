@@ -8,8 +8,8 @@ body {
 }
 .page {
   max-width: 500px;
-  border-right: 1px solid #333;
-  border-bottom: 1px solid #333;
+  border-right: 1px solid #c8c8c8;
+  border-bottom: 1px solid #c8c8c8;
   display: flex;
   flex-direction: column;
   article {
@@ -17,27 +17,25 @@ body {
     overflow: scroll;
   }
 }
-.highlight {
-  background: yellow;
-}
 header {
-  border-bottom: 1px solid #4d4d4d;
+  background: #e8e8e8;
+  border-bottom: 1px solid #c8c8c8;
   color: #4d4d4d;
   display: flex;
   flex-direction: row;
   .action {
-    padding: 5px;
+    padding: 10px;
     cursor: pointer;
     &:hover {
       background: #eee;
     }
   }
   .action:last-child {
-    margin-right: 10px;
+    margin-right: 5px;
   }
 }
 h1 {
-  padding: 5px 15px;
+  padding: 10px 15px;
   flex: 1;
   font-size: 1em;
   margin: 0;
@@ -57,10 +55,13 @@ article p {
 .highlight {
   background: lightblue;
 }
+p:hover .highlight {
+  background: rgb(105, 202, 233);
+}
 
 .versions {
   width: 200px;
-  border-right: 1px solid #333;
+  border-right: 1px solid #c8c8c8;
   display: flex;
   flex-direction: column;
   .column {

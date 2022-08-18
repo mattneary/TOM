@@ -129,7 +129,8 @@ class Link {
 
   partialI(addr: Address): Link {
     const translated = this.translateI(addr)
-    return translated ? new Link(addr, translated) : null
+    const untranslated = this.invert().translateI(translated)
+    return translated ? new Link(untranslated, translated) : null
   }
 }
 
@@ -494,7 +495,10 @@ export function Tom({
             model.render(ref)
             const article = ref.querySelector('article')
             article.setAttribute('contentEditable', false)
-            links.forEach(x => x.toJerry(article).highlight())
+            links.forEach(x => {
+              const addr = x.toJerry(article)
+              addr.highlight()
+            })
           }
         }}
         onClick={() => setEditing && setEditing(true)}
@@ -540,7 +544,7 @@ export function Tom({
         }
       }}
       onKeyDown={evt => {
-        const specialKeys = {'Space': ' ', 'Period': '.'}
+        const specialKeys = {'Space': ' ', 'Period': '.', 'Minus': '-', 'Quote': '\''}
         if (evt.code === 'Backspace') {
           const isEmpty = model.emptySelection()
           if (!isEmpty) evt.preventDefault()
@@ -552,6 +556,8 @@ export function Tom({
           onChange(newModel)
         } else if (evt.code === 'Escape') {
           if (setEditing) setEditing(false)
+        } else if (evt.code !== 'Enter') {
+          evt.preventDefault()
         }
       }}
     >
@@ -576,9 +582,9 @@ export default function App({content}) {
   const root = history.find(x => x.blocks.id === comparisonVersion)
   const composed = history.length > 1 && _.initial(history).map(x => x.links).reduce((a, b) => a.compose(b))
   const outboundLinks = composed && composed.range().filter(x => x.basis === root)
-  const inboundLinks = composed && composed.preimage(outboundLinks)
-  console.log(model.content.links.toString())
+  const inboundLinks = composed && composed.preimage(outboundLinks)//.filter(x => x.basis === model)
   console.log(outboundLinks.toString())
+  console.log(inboundLinks.toString())
   return (
     <div className='pages'>
       <Tom
@@ -586,7 +592,6 @@ export default function App({content}) {
         model={model}
         onChange={m => {
           setModel(m)
-          setVersion(x => x + 1)
         }}
         setEditing={setEditing}
         immutable={!editing || comparisonVersion}
