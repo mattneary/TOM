@@ -486,9 +486,13 @@ export function Tom({
   setEditing = null,
   onClose = null,
   versionType = null,
+  showVersions = null,
+  showingVersions = false,
 }) {
-  const model = models[modelKey]
+  const model = models.lookup[modelKey]
   if (immutable) {
+    const parentKey = models.order[models.order.indexOf(modelKey) - 1]
+    const foreignLinks = model.content.links.links.filter(x => _.get(x, 'dest.basis.blocks.id') !== parentKey)
     return (
       <div
         className={cx(
@@ -506,6 +510,36 @@ export function Tom({
               const addr = x.toJerry(article)
               addr.highlight()
             })
+            foreignLinks.forEach(x => {
+              const addr = x.origin.toJerry(article)
+              const leafs = addr.toLeafs()
+              console.log('addr for foreign link', leafs)
+              const note = document.createElement('div')
+              const articleRect = article.getBoundingClientRect()
+              const leafRect = leafs[0].root.parentNode.getBoundingClientRect()
+              console.log(articleRect, leafRect)
+              note.classList.add('note')
+              note.style.position = 'absolute'
+              note.style.left = `${articleRect.left + articleRect.width + 5}px`
+              note.style.top = `${leafRect.top}px`
+
+              const banner = document.createElement('div')
+              banner.classList.add('banner')
+              const title = document.createElement('div')
+              title.classList.add('title')
+              const source = document.createElement('div')
+              source.classList.add('source')
+              source.innerText = x.dest.basis.blocks.id
+              title.appendChild(source)
+              banner.appendChild(title)
+              const quote = document.createElement('div')
+              quote.innerText = x.dest.basis.blocks.readRange(x.dest.start, x.dest.end)
+              quote.classList.add('description')
+              note.appendChild(quote)
+              note.appendChild(banner)
+
+              ref.appendChild(note)
+            })
             article.addEventListener('copy', evt => {
               const article = ref.querySelector('article')
               if (!article) return
@@ -520,15 +554,18 @@ export function Tom({
         onClick={() => setEditing && setEditing(true)}
       >
         <header>
-          {onChange && <div className="action active">&#x2630;</div>}
+          {showVersions && <div
+            className={cx('action', showingVersions && 'active')}
+            onClick={() => showVersions(x => !x)}
+          >&#x2630;</div>}
+          {onClose && (
+            <div className="action" onClick={() => onClose()}>&times;</div>
+          )}
           <h1>{title || <>&nbsp;</>}</h1>
           {onChange && <>
             <div className="action">&#x2197;</div>
             <div className="action">&#x2199;</div>
           </>}
-          {onClose && (
-            <div className="action" onClick={() => onClose()}>&times;</div>
-          )}
         </header>
       </div>
     )
@@ -549,7 +586,7 @@ export function Tom({
             }
             const [basisId, range] = data.split(':')
             const [start, end] = range.split('-').map(x => +x)
-            const newModel = model.insertReference(models[basisId].content, start, end)
+            const newModel = model.insertReference(models.lookup[basisId].content, start, end)
             onChange(newModel)
           })
         }
@@ -566,19 +603,25 @@ export function Tom({
           const newModel = model.insertChar(key)
           onChange(newModel)
         } else if (evt.code === 'Escape') {
-          if (setEditing) setEditing(false)
+          if (setEditing) {
+            setEditing(false)
+            evt.preventDefault()
+          }
         } else if (evt.code !== 'Enter') {
           evt.preventDefault()
         }
       }}
     >
       <header>
-        {onChange && <div className="action active">&#x2630;</div>}
+        <div
+          className={cx('action', showingVersions && 'active')}
+          onClick={() => showVersions(x => !x)}
+        >&#x2630;</div>
         <h1>{title}</h1>
-        {onChange && <>
+        <>
           <div className="action">&#x2197;</div>
           <div className="action">&#x2199;</div>
-        </>}
+        </>
       </header>
     </div>
   )
@@ -593,16 +636,23 @@ export default function App({content}) {
   const defaultModel = new TOM(content)
   const defaultKey = defaultModel.content.blocks.id
 
-  const [models, setModels] = React.useState({[defaultKey]: defaultModel})
+  const [models, setModels] = React.useState({
+    lookup: {[defaultKey]: defaultModel},
+    order: [defaultKey],
+  })
   const [modelKey, setModelKey] = React.useState(defaultKey)
-  const model = models[modelKey]
+  const model = models.lookup[modelKey]
   const setModel = model => {
     const modelKey = model.content.blocks.id
-    setModels({...models, [modelKey]: model})
+    setModels({
+      lookup: {...models.lookup, [modelKey]: model},
+      order: [...models.order, modelKey],
+    })
     setModelKey(modelKey)
   }
 
   const [editing, setEditing] = React.useState(true)
+  const [showingVersions, setShowingVersions] = React.useState(true)
   const [comparisonVersion, setComparisonVersion] = React.useState(null)
   const history: Content[] = getHistory(model.content)
   const version = model.content.blocks.id
@@ -612,7 +662,7 @@ export default function App({content}) {
   const versionType = root && (rootParent && root.blocks.length < rootParent.blocks.length ? '-' : '+')
   return (
     <div className='pages'>
-      <div className="versions">
+      {showingVersions && <div className="versions">
         <header><h1>Versions</h1></header>
         <div className="column">
           {history.map((content, i) => {
@@ -627,9 +677,11 @@ export default function App({content}) {
             )
           })}
         </div>
-      </div>
+      </div>}
       {!comparisonVersion && <Tom
         title={`Man in Universe (latest)`}
+        showVersions={setShowingVersions}
+        showingVersions={showingVersions}
         modelKey={modelKey}
         models={models}
         onChange={m => {
