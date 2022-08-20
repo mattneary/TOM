@@ -1,7 +1,7 @@
 body {
   margin: 0;
   font-size: 15px;
-  background: #e1e1e1;
+  background: white;
 }
 .pages {
   display: flex;
@@ -9,12 +9,12 @@ body {
 }
 .page {
   max-width: 500px;
-  border-right: 1px solid #c8c8c8;
-  border-bottom: 1px solid #c8c8c8;
+  border: 1px solid #c8c8c8;
   display: flex;
   flex-direction: column;
-  background: white;
+  background: #e1e1e1;
   article {
+    background: white;
     flex: 1;
     overflow: scroll;
   }
@@ -63,7 +63,7 @@ article p {
   white-space: pre-wrap;
 }
 .page.add article {
-  color: #0000c8;
+  color: #4f9ef8;
 }
 .page.delete article {
   color: #c8c8c8;
@@ -73,6 +73,7 @@ article p {
 }
 
 .versions {
+  background: #e1e1e1;
   width: 200px;
   display: flex;
   flex-direction: column;

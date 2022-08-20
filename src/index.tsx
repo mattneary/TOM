@@ -491,6 +491,7 @@ export function Tom({
 }) {
   const model = models.lookup[modelKey]
   if (immutable) {
+    // TODO: this glitches for delete patch viewer because deletes pass data in sort of reversed
     const parentKey = models.order[models.order.indexOf(modelKey) - 1]
     const foreignLinks = model.content.links.links.filter(x => _.get(x, 'dest.basis.blocks.id') !== parentKey)
     return (
@@ -520,7 +521,7 @@ export function Tom({
               console.log(articleRect, leafRect)
               note.classList.add('note')
               note.style.position = 'absolute'
-              note.style.left = `${articleRect.left + articleRect.width + 5}px`
+              note.style.left = `${articleRect.left + articleRect.width + 10}px`
               note.style.top = `${leafRect.top}px`
 
               const banner = document.createElement('div')
