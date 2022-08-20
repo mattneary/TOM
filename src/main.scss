@@ -59,13 +59,13 @@ article {
 article p {
   white-space: pre-wrap;
 }
-.page.immutable article {
-  color: #c8c8c8;
-}
-.page.basis article {
+.page.add article {
   color: #0000c8;
 }
-.highlight {
+.page.delete article {
+  color: #c8c8c8;
+}
+.page article .highlight {
   color: #4d4d4d;
 }
 
@@ -90,7 +90,7 @@ article p {
       background: #c8c8c8;
     }
     &:first-of-type {
-      padding-top: 1em;
+      margin-top: 1em;
     }
     padding: 4px 10px;
     &.disabled {

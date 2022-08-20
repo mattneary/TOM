@@ -202,7 +202,7 @@ class SplitString {
   strs: string[]
   length: number
   constructor(strs: string[]) {
-    this.id = _.uniqueId('content-')
+    this.id = _.uniqueId('edit-')
     this.strs = strs
     this.length = _.sumBy(strs, 'length')
   }
@@ -484,11 +484,16 @@ export function Tom({
   immutable = false,
   setEditing = null,
   onClose = null,
+  versionType = null,
 }) {
   if (immutable) {
     return (
       <div
-        className={cx('page immutable', !onClose && 'basis')}
+        className={cx(
+          'page immutable',
+          !onClose && 'basis',
+          {'-': 'delete', '+': 'add'}[versionType]
+        )}
         key="immutable"
         ref={ref => {
           if (ref && !ref.querySelector('article')) {
@@ -590,11 +595,10 @@ export default function App({content}) {
   const history: Content[] = getHistory(model.content)
   const version = model.content.blocks.id
   const root = history.find(x => x.blocks.id === comparisonVersion)
-  const composed = history.length > 1 && _.initial(history).map(x => x.links).reduce((a, b) => a.compose(b))
-  const outboundLinks = composed && composed.range().filter(x => x.basis === root)
-  const inboundLinks = composed && composed.preimage(outboundLinks)//.filter(x => x.basis === model)
-  console.log(outboundLinks.toString())
-  console.log(inboundLinks.toString())
+  const rootParent = history[history.indexOf(root) + 1]
+  const outboundLinks = root && root.links.domain().filter(x => x.basis === root)
+  console.log(outboundLinks?.toString())
+  const versionType = root && root.links.domain().length === 1 ? '-' : '+'
   return (
     <div className='pages'>
       <div className="versions">
@@ -602,32 +606,34 @@ export default function App({content}) {
         <div className="column">
           {history.map(content => {
             const id = content.blocks.id
+            const editType = content.links.domain().length === 1 ? '-' : '+'
             return (
               <div
-                className={cx('version', id === version && 'disabled')}
-                onClick={() => id !== version && setComparisonVersion(id)}
-              >{id}</div>
+                className="version"
+                onClick={() => setComparisonVersion(id)}
+              >{id} ({editType})</div>
             )
           })}
         </div>
       </div>
-      <Tom
-        title={`Man in Universe (${version})`}
+      {!comparisonVersion && <Tom
+        title={`Man in Universe (latest)`}
         model={model}
         onChange={m => {
           setModel(m)
         }}
         setEditing={setEditing}
         immutable={!editing || comparisonVersion}
-        links={comparisonVersion ? inboundLinks : []}
+        links={[]}
         key={`${editing}-${comparisonVersion}`}
-      />
+      />}
       {comparisonVersion && (<Tom
           key={comparisonVersion}
           title={`Man in Universe (${comparisonVersion})`}
-          model={new TOM(root)}
-          links={outboundLinks}
+          model={new TOM(versionType === '-' && rootParent ? rootParent : root)}
+          links={versionType === '-' && rootParent ? root.links.invert().domain() : outboundLinks}
           onClose={() => setComparisonVersion(null)}
+          versionType={versionType}
           immutable
         />)}
     </div>
