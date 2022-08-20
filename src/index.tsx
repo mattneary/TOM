@@ -488,7 +488,7 @@ export function Tom({
   if (immutable) {
     return (
       <div
-        className='page'
+        className={cx('page immutable', !onClose && 'basis')}
         key="immutable"
         ref={ref => {
           if (ref && !ref.querySelector('article')) {
@@ -504,7 +504,12 @@ export function Tom({
         onClick={() => setEditing && setEditing(true)}
       >
         <header>
+          {onChange && <div className="action active">&#x2630;</div>}
           <h1>{title || <>&nbsp;</>}</h1>
+          {onChange && <>
+            <div className="action">&#x2197;</div>
+            <div className="action">&#x2199;</div>
+          </>}
           {onClose && (
             <div className="action" onClick={() => onClose()}>&times;</div>
           )}
@@ -562,7 +567,12 @@ export function Tom({
       }}
     >
       <header>
+        {onChange && <div className="action active">&#x2630;</div>}
         <h1>{title}</h1>
+        {onChange && <>
+          <div className="action">&#x2197;</div>
+          <div className="action">&#x2199;</div>
+        </>}
       </header>
     </div>
   )
@@ -587,6 +597,20 @@ export default function App({content}) {
   console.log(inboundLinks.toString())
   return (
     <div className='pages'>
+      <div className="versions">
+        <header><h1>Versions</h1></header>
+        <div className="column">
+          {history.map(content => {
+            const id = content.blocks.id
+            return (
+              <div
+                className={cx('version', id === version && 'disabled')}
+                onClick={() => id !== version && setComparisonVersion(id)}
+              >{id}</div>
+            )
+          })}
+        </div>
+      </div>
       <Tom
         title={`Man in Universe (${version})`}
         model={model}
@@ -598,29 +622,14 @@ export default function App({content}) {
         links={comparisonVersion ? inboundLinks : []}
         key={`${editing}-${comparisonVersion}`}
       />
-      {comparisonVersion
-        ? <Tom
+      {comparisonVersion && (<Tom
           key={comparisonVersion}
           title={`Man in Universe (${comparisonVersion})`}
           model={new TOM(root)}
           links={outboundLinks}
           onClose={() => setComparisonVersion(null)}
           immutable
-        />
-        : <div className="versions">
-          <header><h1>Versions</h1></header>
-          <div className="column">
-            {history.map(content => {
-              const id = content.blocks.id
-              return (
-                <div
-                  className={cx('version', id === version && 'disabled')}
-                  onClick={() => id !== version && setComparisonVersion(id)}
-                >{id}</div>
-              )
-            })}
-          </div>
-        </div>}
+        />)}
     </div>
   )
 }
