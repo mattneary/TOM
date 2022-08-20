@@ -653,7 +653,6 @@ export default function App({content}) {
   }
 
   const [editing, setEditing] = React.useState(true)
-  const [showingVersions, setShowingVersions] = React.useState(true)
   const [comparisonVersion, setComparisonVersion] = React.useState(null)
   const history: Content[] = getHistory(model.content)
   const version = model.content.blocks.id
@@ -663,7 +662,7 @@ export default function App({content}) {
   const versionType = root && (rootParent && root.blocks.length < rootParent.blocks.length ? '-' : '+')
   return (
     <div className='pages'>
-      {showingVersions && <div className="versions">
+      {!editing && <div className="versions">
         <header><h1>Versions</h1></header>
         <div className="column">
           {history.map((content, i) => {
@@ -681,15 +680,15 @@ export default function App({content}) {
       </div>}
       {!comparisonVersion && <Tom
         title={`Man in Universe (latest)`}
-        showVersions={setShowingVersions}
-        showingVersions={showingVersions}
+        showVersions={versions => setEditing(!versions)}
+        showingVersions={!editing}
         modelKey={modelKey}
         models={models}
         onChange={m => {
           setModel(m)
         }}
         setEditing={setEditing}
-        immutable={!editing || comparisonVersion}
+        immutable={!editing}
         links={[]}
         key={`${editing}-${comparisonVersion}`}
       />}
