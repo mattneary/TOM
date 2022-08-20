@@ -279,7 +279,7 @@ class SplitString {
     const [startOffset, startStr] = startPair
     const [endOffset, endStr] = endPair
     if (startIdx === endIdx) {
-      return startStr.substr(start - startOffset, end - startOffset)
+      return startStr.substr(start - startOffset, end - start)
     }
     // TODO: I believe this misses the case of spanning some intervening blocks
     return startStr.substr(start - startOffset) + endStr.substr(0, end - endOffset)
@@ -547,7 +547,8 @@ export function Tom({
             const article = ref.querySelector('article')
             if (!article) return
             const sel = new Jerry(article).getSelection()
-            evt.clipboardData.setData('text/plain', sel.getContent())
+            const content = sel.getContent()
+            evt.clipboardData.setData('text/plain', content)
             evt.clipboardData.setData('jerry', model.content.blocks.id + ':' + [sel.start, sel.end].join('-'))
             evt.preventDefault()
           })
@@ -598,15 +599,16 @@ export default function App({content}) {
   const rootParent = history[history.indexOf(root) + 1]
   const outboundLinks = root && root.links.domain().filter(x => x.basis === root)
   console.log(outboundLinks?.toString())
-  const versionType = root && root.links.domain().length === 1 ? '-' : '+'
+  const versionType = root && (rootParent && root.blocks.length < rootParent.blocks.length ? '-' : '+')
   return (
     <div className='pages'>
       <div className="versions">
         <header><h1>Versions</h1></header>
         <div className="column">
-          {history.map(content => {
+          {history.map((content, i) => {
+            const prev = history[i + 1]
             const id = content.blocks.id
-            const editType = content.links.domain().length === 1 ? '-' : '+'
+            const editType = prev && content.blocks.length < prev.blocks.length ? '-' : '+'
             return (
               <div
                 className="version"
