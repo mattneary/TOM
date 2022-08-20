@@ -477,7 +477,8 @@ export class TOM {
 }
 
 export function Tom({
-  model,
+  modelKey,
+  models,
   title = '',
   links = [],
   onChange = null,
@@ -486,6 +487,7 @@ export function Tom({
   onClose = null,
   versionType = null,
 }) {
+  const model = models[modelKey]
   if (immutable) {
     return (
       <div
@@ -503,6 +505,15 @@ export function Tom({
             links.forEach(x => {
               const addr = x.toJerry(article)
               addr.highlight()
+            })
+            article.addEventListener('copy', evt => {
+              const article = ref.querySelector('article')
+              if (!article) return
+              const sel = new Jerry(article).getSelection()
+              const content = sel.getContent()
+              evt.clipboardData.setData('text/plain', content)
+              evt.clipboardData.setData('jerry', modelKey + ':' + [sel.start, sel.end].join('-'))
+              evt.preventDefault()
             })
           }
         }}
@@ -532,25 +543,14 @@ export function Tom({
           const article = ref.querySelector('article')
           article.addEventListener('paste', evt => {
             const data = evt.clipboardData.getData('jerry')
+            if (!data) {
+              evt.preventDefault()
+              return
+            }
             const [basisId, range] = data.split(':')
             const [start, end] = range.split('-').map(x => +x)
-            if (model.content.blocks.id === basisId) {
-              console.log('local reference', data)
-              const newModel = model.insertReference(model.content, start, end)
-              onChange(newModel)
-            } else {
-              // TODO: implement paste for other cases
-              evt.preventDefault()
-            }
-          })
-          article.addEventListener('copy', evt => {
-            const article = ref.querySelector('article')
-            if (!article) return
-            const sel = new Jerry(article).getSelection()
-            const content = sel.getContent()
-            evt.clipboardData.setData('text/plain', content)
-            evt.clipboardData.setData('jerry', model.content.blocks.id + ':' + [sel.start, sel.end].join('-'))
-            evt.preventDefault()
+            const newModel = model.insertReference(models[basisId].content, start, end)
+            onChange(newModel)
           })
         }
       }}
@@ -590,15 +590,25 @@ function getHistory(content) {
 }
 
 export default function App({content}) {
-  const [model, setModel] = React.useState(new TOM(content))
+  const defaultModel = new TOM(content)
+  const defaultKey = defaultModel.content.blocks.id
+
+  const [models, setModels] = React.useState({[defaultKey]: defaultModel})
+  const [modelKey, setModelKey] = React.useState(defaultKey)
+  const model = models[modelKey]
+  const setModel = model => {
+    const modelKey = model.content.blocks.id
+    setModels({...models, [modelKey]: model})
+    setModelKey(modelKey)
+  }
+
   const [editing, setEditing] = React.useState(true)
   const [comparisonVersion, setComparisonVersion] = React.useState(null)
   const history: Content[] = getHistory(model.content)
   const version = model.content.blocks.id
   const root = history.find(x => x.blocks.id === comparisonVersion)
   const rootParent = history[history.indexOf(root) + 1]
-  const outboundLinks = root && root.links.domain().filter(x => x.basis === root)
-  console.log(outboundLinks?.toString())
+  const outboundLinks = root && rootParent && root.links.invert().partial(new Address(rootParent, 0, rootParent.blocks.length)).range()
   const versionType = root && (rootParent && root.blocks.length < rootParent.blocks.length ? '-' : '+')
   return (
     <div className='pages'>
@@ -620,7 +630,8 @@ export default function App({content}) {
       </div>
       {!comparisonVersion && <Tom
         title={`Man in Universe (latest)`}
-        model={model}
+        modelKey={modelKey}
+        models={models}
         onChange={m => {
           setModel(m)
         }}
@@ -632,7 +643,8 @@ export default function App({content}) {
       {comparisonVersion && (<Tom
           key={comparisonVersion}
           title={`Man in Universe (${comparisonVersion})`}
-          model={new TOM(versionType === '-' && rootParent ? rootParent : root)}
+          modelKey={versionType === '-' && rootParent ? rootParent.blocks.id : root.blocks.id}
+          models={models}
           links={versionType === '-' && rootParent ? root.links.invert().domain() : outboundLinks}
           onClose={() => setComparisonVersion(null)}
           versionType={versionType}
