@@ -645,10 +645,10 @@ export default function App({content}) {
   const model = models.lookup[modelKey]
   const setModel = model => {
     const modelKey = model.content.blocks.id
-    setModels({
+    setModels(models => ({
       lookup: {...models.lookup, [modelKey]: model},
       order: [...models.order, modelKey],
-    })
+    }))
     setModelKey(modelKey)
   }
 

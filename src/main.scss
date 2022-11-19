@@ -10,6 +10,8 @@ body {
 .page {
   max-width: 500px;
   border: 1px solid #c8c8c8;
+  border-top: none;
+  border-bottom: none;
   display: flex;
   flex-direction: column;
   background: #e1e1e1;
