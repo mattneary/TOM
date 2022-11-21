@@ -113,7 +113,7 @@ class BudList {
     ])
   }
 
-  replaceBud(start: number, newBud: Bud, bias: Direction = 'left'): BudList {
+  replaceBud(start: number, newBud: Bud, bias: Direction = 'right'): BudList {
     const [pairs, startPair] = this.getPair(start, bias)
     const startIdx = pairs.indexOf(startPair)
     const [startOffset, startBud] = startPair
@@ -341,7 +341,7 @@ export class Page {
 
     const contentLength = _.sumBy(this.budList.buds, budLength)
     const newModel = new Page(
-      this.budList.replaceBud(sel.start, refBud, sel.bias),
+      this.budList.replaceBud(sel.start, refBud),
       this.root
     )
     newModel.ribbons = new Ribbons([
