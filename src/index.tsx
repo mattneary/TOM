@@ -5,24 +5,68 @@ import cx from 'classnames'
 import './main.scss'
 import {Interval, Ribbon, Ribbons} from './ribbons'
 
-type TextBud = {type: 'text', content: string}
-type RefBud = {type: 'ref', src: Interval<Page>, displayMode: string}
-type Bud = TextBud | RefBud
+class Bud {
+  type: string
+
+  getLength(): number {
+    return 0
+  }
+
+  toHtmlNode() {
+    return null
+  }
+}
+
+class TextBud extends Bud {
+  content: string
+  constructor(content: string) {
+    super()
+    this.type = 'text'
+    this.content = content
+  }
+
+  getLength() {
+    return this.content.length
+  } 
+
+  toHtmlNode() {
+    return document.createTextNode(this.content)
+  }
+}
+
+class RefBud extends Bud {
+  src: Interval<Page>
+  displayMode: string
+  constructor(src: Interval<Page>) {
+    super()
+    this.type = 'ref'
+    this.displayMode = 'bud'
+    this.src = src
+  }
+
+  getLength() {
+    return 1
+  } 
+
+  toHtmlNode() {
+    // TODO: once jerry supports content boundaries can actually render something for RefBuds
+    return document.createTextNode('#')
+  }
+}
 
 type Direction = 'left' | 'right' | 'neither'
 type Pair = [number, Bud]
 
 function budLength(bud) {
-  if (bud.type === 'text') return bud.content.length
-  return 1
+  return bud.getLength()
 }
 
 function offsetZip(xs: Bud[]): [number, Bud][] {
   let offset = 0
   let chunks = []
-  xs.forEach(x => {
-    chunks.push([offset, x])
-    offset += budLength(x)
+  xs.forEach(bud => {
+    chunks.push([offset, bud])
+    offset += bud.getLength()
   })
   return chunks
 }
@@ -31,7 +75,7 @@ class BudList {
   buds: Bud[]
   length: number
   constructor(buds: (string | Bud)[]) {
-    this.buds = buds.map(str => _.isString(str) ? {type: 'text', content: str} : str)
+    this.buds = _.compact(buds).map(str => _.isString(str) ? new TextBud(str) : str)
     this.length = _.sumBy(this.buds, budLength)
   }
 
@@ -49,7 +93,7 @@ class BudList {
     const [pairs, startPair] = this.getPair(start, bias)
     const startIdx = pairs.indexOf(startPair)
     const [startOffset, startBud] = startPair
-    if (startBud.type !== 'text') {
+    if (!(startBud instanceof TextBud)) {
       // Can't insert into non-text bud
       return
     }
@@ -69,12 +113,31 @@ class BudList {
     ])
   }
 
+  replaceBud(start: number, newBud: Bud, bias: Direction = 'left'): BudList {
+    const [pairs, startPair] = this.getPair(start, bias)
+    const startIdx = pairs.indexOf(startPair)
+    const [startOffset, startBud] = startPair
+    if (bias === 'neither') {
+      // the case when cursor is in a new, blank block
+      return new BudList([
+        ...this.buds.slice(0, startIdx + 1),
+        newBud,
+        ...this.buds.slice(startIdx + 1),
+      ])
+    }
+    return new BudList([
+      ...this.buds.slice(0, startIdx),
+      newBud,
+      ...this.buds.slice(startIdx + 1),
+    ])
+  }
+
   backspace(start: number): BudList {
     const pairs = offsetZip(this.buds)
     const startPair = _.findLast(pairs, ([offset]) => offset < start)
     const startIdx = pairs.indexOf(startPair)
     const [startOffset, startBud] = startPair
-    if (startBud.type !== 'text') {
+    if (!(startBud instanceof TextBud)) {
       // TODO: can backspace by removing non-text buds
       return
     }
@@ -94,7 +157,7 @@ class BudList {
     const endIdx = pairs.indexOf(endPair)
     const [startOffset, startBud] = startPair
     const [endOffset, endBud] = endPair
-    if (startBud.type !== 'text' || endBud.type !== 'text') {
+    if (!(startBud instanceof TextBud) || !(endBud instanceof TextBud)) {
       // TODO: can delete non-text buds but not supported yet
       return
     }
@@ -122,7 +185,7 @@ class BudList {
     const endIdx = pairs.indexOf(endPair)
     const [startOffset, startBud] = startPair
     const [endOffset, endBud] = endPair
-    if (startBud.type !== 'text' || endBud.type !== 'text') {
+    if (!(startBud instanceof TextBud) || !(endBud instanceof TextBud)) {
       // TODO: can read non-text buds but not supported yet
       return
     }
@@ -136,15 +199,11 @@ class BudList {
   }
 }
 
-function budsToHtml(buds: BudList): Element {
+function budsToHtml(budList: BudList): Element {
   const article = document.createElement('article')
-  buds.buds.forEach(bud => {
+  budList.buds.forEach(bud => {
     const p = document.createElement('p')
-    if (bud.type !== 'text') {
-      // TODO: non-text buds not yet supported
-      return
-    }
-    p.appendChild(document.createTextNode(bud.content))
+    p.appendChild(bud.toHtmlNode())
     article.appendChild(p)
   })
   article.setAttribute('contentEditable', 'true')
@@ -205,7 +264,7 @@ export class Page {
     const newModel = new Page(
       new BudList([
         ...this.budList.buds.slice(0, formerIdx),
-        ...((formerPair[1].type === 'text' && latterPair[1].type === 'text') ?
+        ...((formerPair[1] instanceof TextBud && latterPair[1] instanceof TextBud) ?
             [formerPair[1].content + latterPair[1].content] :
             [formerPair[1], latterPair[1]]
         ),
@@ -262,6 +321,37 @@ export class Page {
       sel.end !== contentLength && new Ribbon(
         new Interval(newModel, sel.start, contentLength - (sel.end - sel.start)),
         new Interval(this, sel.end, contentLength)
+      ),
+    ])
+    return newModel
+  }
+
+  quote(): Page {
+    const article = this.root.querySelector('article')
+    const jerry = new Jerry(article)
+    const sel = jerry.getSelection()
+    const leafs = sel.toLeafs()
+    if (leafs.length !== 1) return this
+    const leaf = jerry.getNodeAddress(leafs[0].root).rebase()
+    const refInterval = new Interval<Page>(this, leaf.start, leaf.end)
+    const refBud = new RefBud(refInterval)
+
+    const parentNode = leafs[0].root.parentNode
+    parentNode.replaceChild(refBud.toHtmlNode(), leafs[0].root)
+
+    const contentLength = _.sumBy(this.budList.buds, budLength)
+    const newModel = new Page(
+      this.budList.replaceBud(sel.start, refBud, sel.bias),
+      this.root
+    )
+    newModel.ribbons = new Ribbons([
+      refInterval.start && new Ribbon(
+        new Interval(newModel, 0, refInterval.start),
+        new Interval(this, 0, refInterval.start)
+      ),
+      refInterval.end !== contentLength && new Ribbon(
+        new Interval(newModel, refInterval.start + 1, contentLength - (refInterval.end - refInterval.start) + 1),
+        new Interval(this, refInterval.end, contentLength)
       ),
     ])
     return newModel
@@ -369,6 +459,11 @@ export function Tom({
           if (!isEmpty) evt.preventDefault()
           const newModel = isEmpty ? page.backspace() : page.deleteSelection()
           onChange(newModel)
+        } else if (evt.code === 'Period' && evt.shiftKey) {
+          const isEmpty = page.emptySelection()
+          if (isEmpty) return
+          evt.preventDefault()
+          onChange(page.quote())
         } else if (evt.code.startsWith('Key') || specialKeys[evt.code]) {
           if (evt.metaKey || evt.ctrlKey) {
             return
