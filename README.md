@@ -61,10 +61,10 @@ type Page = {
 }
 
 type Bud = TextBud | RefBud | Branch
-type TextBud = {content: string}
+type TextBud = {type: 'text', content: string}
 type DisplayMode = 'bud' | 'card' | 'quote'
-type RefBud = {src: string, displayMode: DisplayMode}
-type Branch = {buds: Bud[], displayMode: DisplayMode}
+type RefBud = {type: 'ref', src: string, displayMode: DisplayMode}
+type Branch = {type: 'branch', buds: Bud[], displayMode: DisplayMode}
 
 type Ribbon = {
   origin: Interval

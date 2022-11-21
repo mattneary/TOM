@@ -5,29 +5,38 @@ import cx from 'classnames'
 import './main.scss'
 import {Interval, Ribbon, Ribbons} from './ribbons'
 
-function offsetZip(xs: string[]): [number, string][] {
+type TextBud = {type: 'text', content: string}
+type RefBud = {type: 'ref', src: Interval<Page>, displayMode: string}
+type Bud = TextBud | RefBud
+
+type Direction = 'left' | 'right' | 'neither'
+type Pair = [number, Bud]
+
+function budLength(bud) {
+  if (bud.type === 'text') return bud.content.length
+  return 1
+}
+
+function offsetZip(xs: Bud[]): [number, Bud][] {
   let offset = 0
   let chunks = []
   xs.forEach(x => {
     chunks.push([offset, x])
-    offset += x.length
+    offset += budLength(x)
   })
   return chunks
 }
 
-type Direction = 'left' | 'right' | 'neither'
-type Pair = [number, string]
-
-class Buds {
-  strs: string[]
+class BudList {
+  buds: Bud[]
   length: number
-  constructor(strs: string[]) {
-    this.strs = strs
-    this.length = _.sumBy(strs, 'length')
+  constructor(buds: (string | Bud)[]) {
+    this.buds = buds.map(str => _.isString(str) ? {type: 'text', content: str} : str)
+    this.length = _.sumBy(this.buds, budLength)
   }
 
   getPair(strIndex: number, bias: Direction = 'left'): [Pair[], Pair] {
-    const pairs = offsetZip(this.strs)
+    const pairs = offsetZip(this.buds)
     return [
       pairs,
       bias === 'left' || bias === 'neither'
@@ -36,67 +45,89 @@ class Buds {
     ]
   }
 
-  insertChar(start: number, c: string, bias: Direction = 'left'): Buds {
+  insertChar(start: number, c: string, bias: Direction = 'left'): BudList {
     const [pairs, startPair] = this.getPair(start, bias)
     const startIdx = pairs.indexOf(startPair)
-    const [startOffset, startStr] = startPair
+    const [startOffset, startBud] = startPair
+    if (startBud.type !== 'text') {
+      // Can't insert into non-text bud
+      return
+    }
+    const startStr = startBud.content
     if (bias === 'neither') {
       // the case when cursor is in a new, blank block
-      return new Buds([
-        ...this.strs.slice(0, startIdx + 1),
+      return new BudList([
+        ...this.buds.slice(0, startIdx + 1),
         c,
-        ...this.strs.slice(startIdx + 1),
+        ...this.buds.slice(startIdx + 1),
       ])
     }
-    return new Buds([
-      ...this.strs.slice(0, startIdx),
+    return new BudList([
+      ...this.buds.slice(0, startIdx),
       startStr.substr(0, start - startOffset) + c + startStr.substr(start - startOffset),
-      ...this.strs.slice(startIdx + 1),
+      ...this.buds.slice(startIdx + 1),
     ])
   }
 
-  backspace(start: number): Buds {
-    const pairs = offsetZip(this.strs)
+  backspace(start: number): BudList {
+    const pairs = offsetZip(this.buds)
     const startPair = _.findLast(pairs, ([offset]) => offset < start)
     const startIdx = pairs.indexOf(startPair)
-    const [startOffset, startStr] = startPair
-    return new Buds([
-      ...this.strs.slice(0, startIdx),
+    const [startOffset, startBud] = startPair
+    if (startBud.type !== 'text') {
+      // TODO: can backspace by removing non-text buds
+      return
+    }
+    const startStr = startBud.content
+    return new BudList([
+      ...this.buds.slice(0, startIdx),
       startStr.substr(0, start - startOffset - 1) + startStr.substr(start - startOffset),
-      ...this.strs.slice(startIdx + 1),
+      ...this.buds.slice(startIdx + 1),
     ])
   }
 
-  deleteRange(start: number, end: number): Buds {
-    const pairs = offsetZip(this.strs)
+  deleteRange(start: number, end: number): BudList {
+    const pairs = offsetZip(this.buds)
     const startPair = _.findLast(pairs, ([offset]) => offset <= start)
     const endPair = _.findLast(pairs, ([offset]) => offset < end)
     const startIdx = pairs.indexOf(startPair)
     const endIdx = pairs.indexOf(endPair)
-    const [startOffset, startStr] = startPair
-    const [endOffset, endStr] = endPair
+    const [startOffset, startBud] = startPair
+    const [endOffset, endBud] = endPair
+    if (startBud.type !== 'text' || endBud.type !== 'text') {
+      // TODO: can delete non-text buds but not supported yet
+      return
+    }
+    const startStr = startBud.content
+    const endStr = endBud.content
     if (startIdx === endIdx) {
-      return new Buds([
-        ...this.strs.slice(0, startIdx),
+      return new BudList([
+        ...this.buds.slice(0, startIdx),
         startStr.substr(0, start - startOffset) + endStr.substr(end - startOffset),
-        ...this.strs.slice(endIdx + 1),
+        ...this.buds.slice(endIdx + 1),
       ])
     }
-    return new Buds([
-      ...this.strs.slice(0, startIdx),
+    return new BudList([
+      ...this.buds.slice(0, startIdx),
       startStr.substr(0, start - startOffset) + endStr.substr(end - endOffset),
-      ...this.strs.slice(endIdx + 1),
+      ...this.buds.slice(endIdx + 1),
     ])
   }
 
   readRange(start: number, end: number): string {
-    const pairs = offsetZip(this.strs)
+    const pairs = offsetZip(this.buds)
     const startPair = _.findLast(pairs, ([offset]) => offset <= start)
     const endPair = _.findLast(pairs, ([offset]) => offset < end)
     const startIdx = pairs.indexOf(startPair)
     const endIdx = pairs.indexOf(endPair)
-    const [startOffset, startStr] = startPair
-    const [endOffset, endStr] = endPair
+    const [startOffset, startBud] = startPair
+    const [endOffset, endBud] = endPair
+    if (startBud.type !== 'text' || endBud.type !== 'text') {
+      // TODO: can read non-text buds but not supported yet
+      return
+    }
+    const startStr = startBud.content
+    const endStr = endBud.content
     if (startIdx === endIdx) {
       return startStr.substr(start - startOffset, end - start)
     }
@@ -105,17 +136,15 @@ class Buds {
   }
 }
 
-type Content = {buds: Buds, ribbons: Ribbons<Page>}
-
-function contentToStrings(content: Content): Buds {
-  return content.buds
-}
-
-function contentToHtml(content: Content): Element {
+function budsToHtml(buds: BudList): Element {
   const article = document.createElement('article')
-  content.buds.strs.forEach(content => {
+  buds.buds.forEach(bud => {
     const p = document.createElement('p')
-    p.appendChild(document.createTextNode(content))
+    if (bud.type !== 'text') {
+      // TODO: non-text buds not yet supported
+      return
+    }
+    p.appendChild(document.createTextNode(bud.content))
     article.appendChild(p)
   })
   article.setAttribute('contentEditable', 'true')
@@ -130,19 +159,20 @@ function mergeElms(a: Element, b: Element) {
 export class Page {
   root: Element
   id: string
-  content: Content
+  budList: BudList
+  ribbons: Ribbons<Page>
 
-  constructor(content: Content | string, node: Element = null) {
+  constructor(budList: BudList | string, node: Element = null) {
     this.id = _.uniqueId('page-')
     this.root = node
-    this.content = _.isString(content)
-      ? { buds: new Buds(content.split('\n\n')), ribbons: new Ribbons([]) }
-      : content
+    this.budList = _.isString(budList)
+      ? new BudList(budList.split('\n\n'))
+      : budList
   }
 
   render(node: Element) {
     this.root = node
-    this.root.appendChild(contentToHtml(this.content))
+    this.root.appendChild(budsToHtml(this.budList))
   }
 
   backspace(): Page {
@@ -150,12 +180,9 @@ export class Page {
     const sel = new Jerry(article).getSelection()
     if (sel.start !== sel.end || !sel.start) return this
     if (sel.bias === 'left') {
-      const contentLength = contentToStrings(this.content).length
-      const newModel = new Page({
-        buds: this.content.buds.backspace(sel.start),
-        ribbons: new Ribbons([]),
-      }, this.root)
-      newModel.content.ribbons = new Ribbons([
+      const contentLength = _.sumBy(this.budList.buds, budLength)
+      const newModel = new Page(this.budList.backspace(sel.start), this.root)
+      newModel.ribbons = new Ribbons([
         new Ribbon(
           new Interval(newModel, 0, sel.start - 1),
           new Interval(this, 0, sel.start - 1)
@@ -169,21 +196,24 @@ export class Page {
     }
 
     // merge adjacent paragraphs in this case
-    const contentLength = contentToStrings(this.content).length
-    const [pairs, latterPair] = this.content.buds.getPair(sel.start, 'right')
+    const contentLength = _.sumBy(this.budList.buds, budLength)
+    const [pairs, latterPair] = this.budList.getPair(sel.start, 'right')
     const latterIdx = pairs.indexOf(latterPair)
     const formerIdx = latterIdx - 1
     const formerPair = pairs[latterIdx - 1]
     if (!formerPair) return this
-    const newModel = new Page({
-      buds: new Buds([
-        ...this.content.buds.strs.slice(0, formerIdx),
-        formerPair[1] + latterPair[1],
-        ...this.content.buds.strs.slice(latterIdx + 1),
+    const newModel = new Page(
+      new BudList([
+        ...this.budList.buds.slice(0, formerIdx),
+        ...((formerPair[1].type === 'text' && latterPair[1].type === 'text') ?
+            [formerPair[1].content + latterPair[1].content] :
+            [formerPair[1], latterPair[1]]
+        ),
+        ...this.budList.buds.slice(latterIdx + 1),
       ]),
-      ribbons: new Ribbons([]),
-    }, this.root)
-    newModel.content.ribbons = new Ribbons([
+      this.root
+    )
+    newModel.ribbons = new Ribbons([
       new Ribbon(
         new Interval(newModel, 0, contentLength),
         new Interval(this, 0, contentLength)
@@ -219,12 +249,12 @@ export class Page {
     }
 
     window.getSelection().empty()
-    const contentLength = contentToStrings(this.content).length
-    const newModel = new Page({
-      buds: this.content.buds.deleteRange(sel.start, sel.end),
-      ribbons: new Ribbons([]),
-    }, this.root)
-    newModel.content.ribbons = new Ribbons([
+    const contentLength = _.sumBy(this.budList.buds, budLength)
+    const newModel = new Page(
+      this.budList.deleteRange(sel.start, sel.end),
+      this.root
+    )
+    newModel.ribbons = new Ribbons([
       sel.start && new Ribbon(
         new Interval(newModel, 0, sel.start),
         new Interval(this, 0, sel.start)
@@ -246,12 +276,12 @@ export class Page {
       return this
     }
 
-    const contentLength = contentToStrings(this.content).length
-    const newModel = new Page({
-      buds: this.content.buds.insertChar(sel.start, c, sel.bias),
-      ribbons: new Ribbons([]),
-    }, this.root)
-    newModel.content.ribbons = new Ribbons([
+    const contentLength = _.sumBy(this.budList.buds, budLength)
+    const newModel = new Page(
+      this.budList.insertChar(sel.start, c, sel.bias),
+      this.root
+    )
+    newModel.ribbons = new Ribbons([
       sel.start && new Ribbon(
         new Interval(newModel, 0, sel.start),
         new Interval(this, 0, sel.start)
@@ -273,13 +303,13 @@ export class Page {
       return this
     }
 
-    const refText = basis.content.buds.readRange(start, end)
-    const contentLength = contentToStrings(this.content).length
-    const newModel = new Page({
-      buds: this.content.buds.insertChar(sel.start, refText, sel.bias),
-      ribbons: new Ribbons([]),
-    }, this.root)
-    newModel.content.ribbons = new Ribbons([
+    const refText = basis.budList.readRange(start, end)
+    const contentLength = _.sumBy(this.budList.buds, budLength)
+    const newModel = new Page(
+      this.budList.insertChar(sel.start, refText, sel.bias),
+      this.root
+    )
+    newModel.ribbons = new Ribbons([
       sel.start && new Ribbon(
         new Interval(newModel, 0, sel.start),
         new Interval(this, 0, sel.start)
@@ -378,7 +408,7 @@ export default function App({content}) {
           setPages(pages => ({...pages, [page.id]: page}))
         }}
       />
-    {/*<div className="page" dangerouslySetInnerHTML={{__html: contentToHtml(page.content).outerHTML}} />*/}
+    {/*<div className="page" dangerouslySetInnerHTML={{__html: budsToHtml(page.budList).outerHTML}} />*/}
     </div>
   )
 }
