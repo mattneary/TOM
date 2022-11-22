@@ -40,7 +40,7 @@ class RefBud extends Bud {
   constructor(src: Interval<Page>) {
     super()
     this.type = 'ref'
-    this.displayMode = 'bud'
+    this.displayMode = 'quote'
     this.src = src
   }
 
@@ -49,8 +49,41 @@ class RefBud extends Bud {
   } 
 
   toHtmlNode() {
-    // TODO: once jerry supports content boundaries can actually render something for RefBuds
-    return document.createTextNode('#')
+    const div = document.createElement('div')
+    div.dataset.jerryType = 'blackbox'
+    div.setAttribute('contentEditable', 'false')
+    div.classList.add('refbud')
+    const signpost = document.createElement('span')
+    signpost.innerText = '|'
+    signpost.dataset.jerryType = 'signpost'
+    signpost.classList.add('signpost')
+    div.appendChild(signpost)
+    if (this.displayMode === 'quote') {
+      div.classList.add('quote')
+      const preview = document.createElement('p')
+      const content = this.src.basis.budList.readRange(this.src.start, this.src.end)
+      preview.innerText = content
+      div.appendChild(preview)
+    }
+    if (this.displayMode === 'bud') {
+      div.classList.add('bud')
+      const title = document.createElement('span')
+      title.classList.add('title')
+      title.innerText = this.src.basis.id
+      div.appendChild(title)
+    }
+    if (this.displayMode === 'card') {
+      div.classList.add('card')
+      const title = document.createElement('h2')
+      title.classList.add('title')
+      title.innerText = this.src.basis.id
+      div.appendChild(title)
+      const preview = document.createElement('p')
+      const content = this.src.basis.budList.readRange(this.src.start, this.src.end)
+      preview.innerText = content
+      div.appendChild(preview)
+    }
+    return div
   }
 }
 
@@ -295,6 +328,13 @@ export class Page {
     const first: jerry.Interval = atoms[0]
     const last: jerry.Interval = _.last(atoms)
     const parents = _.uniq(_.map(atoms, 'root.parentNode'))
+    const signposts = parents.filter(p => p.dataset.jerryType === 'signpost')
+    parents.forEach(p => {
+      if (p.dataset.jerryType === 'signpost') {
+        const blackbox = p.closest('[data-jerry-type=blackbox]')
+        blackbox.parentNode.removeChild(blackbox)
+      }
+    })
     const firstParent = first.root.parentNode
     const lastParent = last.root.parentNode
     atoms.forEach(atom => atom.root.parentNode.removeChild(atom.root))
@@ -331,13 +371,18 @@ export class Page {
     const jerry = new Jerry(article)
     const sel = jerry.getSelection()
     const leafs = sel.toLeafs()
-    if (leafs.length !== 1) return this
-    const leaf = jerry.getNodeAddress(leafs[0].root).rebase()
+    if (leafs.length !== 1) {
+      // TODO: allow quoting multiple paragraphs together
+      return this
+    }
+    const leaf = jerry.getNodeAddress(leafs[0].root).rebase(article)
     const refInterval = new Interval<Page>(this, leaf.start, leaf.end)
     const refBud = new RefBud(refInterval)
 
     const parentNode = leafs[0].root.parentNode
-    parentNode.replaceChild(refBud.toHtmlNode(), leafs[0].root)
+    const quoteNode = refBud.toHtmlNode()
+    parentNode.replaceChild(quoteNode, leafs[0].root)
+    window.getSelection().empty()
 
     const contentLength = _.sumBy(this.budList.buds, budLength)
     const newModel = new Page(
@@ -454,6 +499,7 @@ export function Tom({
       }}
       onKeyDown={evt => {
         const specialKeys = {'Space': ' ', 'Period': '.', 'Minus': '-', 'Quote': '\''}
+        // TODO: implement Enter
         if (evt.code === 'Backspace') {
           const isEmpty = page.emptySelection()
           if (!isEmpty) evt.preventDefault()
