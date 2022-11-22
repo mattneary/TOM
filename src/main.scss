@@ -150,7 +150,7 @@ article p {
 }
 .refbud {
   &.quote {
-    border-left: 3px solid #a0a0a0;
+    border-left: 2px solid #a0a0a0;
     padding-left: 0.5em;
   }
   &.bud {
@@ -179,5 +179,44 @@ article p {
   }
   .signpost {
     display: none;
+  }
+}
+.branch {
+  &.card {
+    display: flex;
+    overflow: scroll;
+    gap: 1em;
+    .refbud {
+      min-width: 400px;
+      height: max-content;
+    }
+  }
+  &.bud {
+    display: flex;
+    overflow: scroll;
+    gap: 0.5em;
+  }
+  &.quote {
+    border-bottom: 1px solid #a0a0a0;
+    .container {
+      min-height: 1em;
+    }
+    .refbud {
+      padding-left: 0;
+      border-left: none;
+    }
+  }
+  .tabBar {
+    display: flex;
+    gap: 1em;
+    border-bottom: 2px solid #a0a0a0;
+    justify-content: center;
+    width: 100%;
+    .tab {
+      cursor: pointer;
+      &.active {
+        font-weight: bold;
+      }
+    }
   }
 }

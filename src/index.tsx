@@ -37,10 +37,10 @@ class TextBud extends Bud {
 class RefBud extends Bud {
   src: Interval<Page>
   displayMode: string
-  constructor(src: Interval<Page>) {
+  constructor(src: Interval<Page>, displayMode = 'quote') {
     super()
     this.type = 'ref'
-    this.displayMode = 'quote'
+    this.displayMode = displayMode
     this.src = src
   }
 
@@ -83,6 +83,81 @@ class RefBud extends Bud {
       preview.innerText = content
       div.appendChild(preview)
     }
+    return div
+  }
+}
+
+class Branch extends Bud {
+  sources: Interval<Page>[]
+  activeTab: number
+  displayMode: string
+  constructor(sources: Interval<Page>[], displayMode = 'quote') {
+    super()
+    this.type = 'branch'
+    this.displayMode = displayMode
+    this.sources = sources
+    this.activeTab = 0
+  }
+
+  getLength() {
+    return this.sources.length
+  } 
+
+  toHtmlNode() {
+    const div = document.createElement('div')
+    div.setAttribute('contentEditable', 'false')
+    div.classList.add('branch')
+    div.classList.add(this.displayMode)
+    if (this.displayMode === 'quote') {
+      const tabBar = document.createElement('div')
+      tabBar.classList.add('tabBar')
+      this.sources.forEach(source => {
+        const title = source.basis.id
+        const tab = document.createElement('div')
+        tab.classList.add('tab')
+        tab.innerText = title
+        tabBar.appendChild(tab)
+      })
+      div.appendChild(tabBar)
+      const container = document.createElement('div')
+      container.classList.add('container')
+      div.appendChild(container)
+      const renderTab = tabNum => {
+        Array.from(container.childNodes).forEach(childNode => childNode.parentNode.removeChild(childNode))
+        container.appendChild(new RefBud(this.sources[tabNum]).toHtmlNode())
+
+
+        Array.from(tabBar.childNodes as any).forEach((tab: any, i) => {
+          if (i === this.activeTab) {
+            tab.classList.add('active')
+          } else {
+            tab.classList.remove('active')
+          }
+        })
+      }
+      renderTab(this.activeTab)
+
+      Array.from(tabBar.childNodes).forEach((tab, i) => {
+        tab.addEventListener('click', () => {
+          console.log('click', i)
+          this.activeTab = i
+          renderTab(i)
+        })
+      })
+    }
+
+    if (this.displayMode === 'card') {
+      this.sources.forEach(source => {
+        div.appendChild(new RefBud(source, 'card').toHtmlNode())
+      })
+    }
+
+    if (this.displayMode === 'bud') {
+      this.sources.forEach(source => {
+        div.appendChild(new RefBud(source, 'bud').toHtmlNode())
+      })
+    }
+
     return div
   }
 }
@@ -146,22 +221,15 @@ class BudList {
     ])
   }
 
-  replaceBud(start: number, newBud: Bud, bias: Direction = 'right'): BudList {
-    const [pairs, startPair] = this.getPair(start, bias)
+  replaceBuds(start: number, end: number, newBud: Bud): BudList {
+    const [pairs, startPair] = this.getPair(start, 'right')
+    const [pairs2, endPair] = this.getPair(end, 'left')
     const startIdx = pairs.indexOf(startPair)
-    const [startOffset, startBud] = startPair
-    if (bias === 'neither') {
-      // the case when cursor is in a new, blank block
-      return new BudList([
-        ...this.buds.slice(0, startIdx + 1),
-        newBud,
-        ...this.buds.slice(startIdx + 1),
-      ])
-    }
+    const endIdx = pairs2.indexOf(endPair)
     return new BudList([
       ...this.buds.slice(0, startIdx),
       newBud,
-      ...this.buds.slice(startIdx + 1),
+      ...this.buds.slice(endIdx + 1),
     ])
   }
 
@@ -371,32 +439,44 @@ export class Page {
     const jerry = new Jerry(article)
     const sel = jerry.getSelection()
     const leafs = sel.toLeafs()
-    if (leafs.length !== 1) {
-      // TODO: allow quoting multiple paragraphs together
-      return this
+
+    let refBud = null
+    let fullInterval = new Interval<Page>(this, _.min(_.map(leafs, 'start')), _.max(_.map(leafs, 'end')))
+    if (leafs.length === 1) {
+      const leaf = jerry.getNodeAddress(leafs[0].root).rebase(article)
+      const refInterval = new Interval<Page>(this, leaf.start, leaf.end)
+      refBud = new RefBud(refInterval)
+    } else {
+      // TODO: this is not the long-term behavior
+      // this is a shortcut for implementing the branch bud-type
+      // in the future, stack and quote over multiple paragraphs will be distinct operations
+      const intervals = leafs.map(leaf => {
+        const rebasedLeaf = jerry.getNodeAddress(leaf.root).rebase(article)
+        return new Interval<Page>(this, rebasedLeaf.start, rebasedLeaf.end)
+      })
+      refBud = new Branch(intervals)
     }
-    const leaf = jerry.getNodeAddress(leafs[0].root).rebase(article)
-    const refInterval = new Interval<Page>(this, leaf.start, leaf.end)
-    const refBud = new RefBud(refInterval)
 
     const parentNode = leafs[0].root.parentNode
     const quoteNode = refBud.toHtmlNode()
+    _.tail(leafs).forEach((leaf: any) => leaf.root.parentNode.removeChild(leaf.root))
     parentNode.replaceChild(quoteNode, leafs[0].root)
     window.getSelection().empty()
 
     const contentLength = _.sumBy(this.budList.buds, budLength)
     const newModel = new Page(
-      this.budList.replaceBud(sel.start, refBud),
+      this.budList.replaceBuds(sel.start, sel.end, refBud),
       this.root
     )
+    const insertedLength = refBud.getLength()
     newModel.ribbons = new Ribbons([
-      refInterval.start && new Ribbon(
-        new Interval(newModel, 0, refInterval.start),
-        new Interval(this, 0, refInterval.start)
+      fullInterval.start && new Ribbon(
+        new Interval(newModel, 0, fullInterval.start),
+        new Interval(this, 0, fullInterval.start)
       ),
-      refInterval.end !== contentLength && new Ribbon(
-        new Interval(newModel, refInterval.start + 1, contentLength - (refInterval.end - refInterval.start) + 1),
-        new Interval(this, refInterval.end, contentLength)
+      fullInterval.end !== contentLength && new Ribbon(
+        new Interval(newModel, fullInterval.start + insertedLength, contentLength - (fullInterval.end - fullInterval.start) + insertedLength),
+        new Interval(this, fullInterval.end, contentLength)
       ),
     ])
     return newModel
