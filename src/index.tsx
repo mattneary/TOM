@@ -100,11 +100,12 @@ class Branch extends Bud {
   }
 
   getLength() {
-    return this.sources.length
+    return this.displayMode === 'quote' ? 1 : this.sources.length
   } 
 
   toHtmlNode() {
     const div = document.createElement('div')
+    div.dataset.jerryType = 'blackbox'
     div.setAttribute('contentEditable', 'false')
     div.classList.add('branch')
     div.classList.add(this.displayMode)
