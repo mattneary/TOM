@@ -720,7 +720,7 @@ export default function App({content}) {
           setPages(pages => ({...pages, [page.id]: page}))
         }}
       />
-    <div className="page" dangerouslySetInnerHTML={{__html: budsToHtml(page.budList).outerHTML}} />
+    {/*<div className="page" dangerouslySetInnerHTML={{__html: budsToHtml(page.budList).outerHTML}} />*/}
     </div>
   )
 }
