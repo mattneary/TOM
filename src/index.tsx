@@ -44,6 +44,26 @@ class RefBud extends Bud {
     this.src = src
   }
 
+  getNextQuote() {
+    return new RefBud(
+      this.src,
+      this.displayMode === 'quote'
+        ? 'card'
+        : this.displayMode === 'card'
+        ? 'bud' : 'bud'
+    )
+  }
+
+  getPrevQuote() {
+    return new RefBud(
+      this.src,
+      this.displayMode === 'bud'
+        ? 'card'
+        : this.displayMode === 'card'
+        ? 'quote' : 'quote'
+    )
+  }
+
   getLength() {
     return 1
   } 
@@ -52,6 +72,7 @@ class RefBud extends Bud {
     const div = document.createElement('div')
     div.dataset.jerryType = 'blackbox'
     div.setAttribute('contentEditable', 'false')
+    div.setAttribute('tabIndex', '-1')
     div.classList.add('refbud')
     const signpost = document.createElement('span')
     signpost.innerText = '|'
@@ -222,6 +243,16 @@ class BudList {
     ])
   }
 
+  replaceBud(oldBud: Bud, newBud: Bud): BudList {
+    const budIdx = this.buds.indexOf(oldBud)
+    console.log('budIdx', budIdx)
+    return new BudList([
+      ...this.buds.slice(0, budIdx),
+      newBud,
+      ...this.buds.slice(budIdx + 1),
+    ])
+  }
+
   replaceBuds(start: number, end: number, newBud: Bud): BudList {
     const [pairs, startPair] = this.getPair(start, 'right')
     const [pairs2, endPair] = this.getPair(end, 'left')
@@ -336,6 +367,17 @@ export class Page {
     this.root.appendChild(budsToHtml(this.budList))
   }
 
+  budAtNode(node: Element): Bud {
+    const article = this.root.querySelector('article')
+    const jerry = new Jerry(article)
+    const leaf = jerry.getNodeAddress(document.activeElement)
+
+    const pairs = offsetZip(this.budList.buds)
+    const startPair = _.findLast(pairs, ([offset]) => offset <= leaf.start)
+    const [startOffset, startBud] = startPair
+    return startBud
+  }
+
   backspace(): Page {
     const article = this.root.querySelector('article')
     const sel = new Jerry(article).getSelection()
@@ -386,6 +428,7 @@ export class Page {
   emptySelection(): boolean {
     const article = this.root.querySelector('article')
     const sel = new Jerry(article).getSelection()
+    if (!sel) return true
     return sel.start === sel.end
   }
 
@@ -463,6 +506,7 @@ export class Page {
     _.tail(leafs).forEach((leaf: any) => leaf.root.parentNode.removeChild(leaf.root))
     parentNode.replaceChild(quoteNode, leafs[0].root)
     window.getSelection().empty()
+    quoteNode.focus()
 
     const contentLength = _.sumBy(this.budList.buds, budLength)
     const newModel = new Page(
@@ -481,6 +525,36 @@ export class Page {
       ),
     ])
     return newModel
+  }
+
+  requote(bud: RefBud, node: Element, dir = 1): Page {
+      const article = this.root.querySelector('article')
+      const jerry = new Jerry(article)
+      const leaf = jerry.getNodeAddress(node)
+
+      const parentNode = node.parentNode
+      const nextQuote = dir === 1 ? bud.getNextQuote() : bud.getPrevQuote()
+      const newBud = nextQuote.toHtmlNode()
+      parentNode.replaceChild(newBud, node)
+      window.getSelection().empty()
+      newBud.focus()
+
+      const contentLength = _.sumBy(this.budList.buds, budLength)
+      const newModel = new Page(
+        this.budList.replaceBud(bud, nextQuote),
+        this.root
+      )
+      newModel.ribbons = new Ribbons([
+        leaf.start && new Ribbon(
+          new Interval(newModel, 0, leaf.start),
+          new Interval(this, 0, leaf.start)
+        ),
+        leaf.end !== contentLength && new Ribbon(
+          new Interval(newModel, leaf.start + 1, contentLength + 1),
+          new Interval(this, leaf.start, contentLength)
+        ),
+      ])
+      return newModel
   }
 
   insertChar(c: string): Page {
@@ -588,9 +662,25 @@ export function Tom({
           onChange(newModel)
         } else if (evt.code === 'Period' && evt.shiftKey) {
           const isEmpty = page.emptySelection()
-          if (isEmpty) return
+          if (isEmpty && document.activeElement.tagName === 'ARTICLE') return
           evt.preventDefault()
-          onChange(page.quote())
+          if (isEmpty) {
+            const bud = page.budAtNode(document.activeElement)
+            const node = document.activeElement
+            onChange(page.requote(bud, node))
+          } else {
+            onChange(page.quote())
+          }
+        } else if (evt.code === 'Comma' && evt.shiftKey) {
+          const isEmpty = page.emptySelection()
+          if (isEmpty && document.activeElement.tagName === 'ARTICLE') return
+          evt.preventDefault()
+          if (isEmpty) {
+            const bud = page.budAtNode(document.activeElement)
+            const node = document.activeElement
+            // TODO: unquoting can only take you to blockquote, can't explode it past that
+            onChange(page.requote(bud, node, -1))
+          }
         } else if (evt.code.startsWith('Key') || specialKeys[evt.code]) {
           if (evt.metaKey || evt.ctrlKey) {
             return
@@ -630,7 +720,7 @@ export default function App({content}) {
           setPages(pages => ({...pages, [page.id]: page}))
         }}
       />
-    {/*<div className="page" dangerouslySetInnerHTML={{__html: budsToHtml(page.budList).outerHTML}} />*/}
+    <div className="page" dangerouslySetInnerHTML={{__html: budsToHtml(page.budList).outerHTML}} />
     </div>
   )
 }

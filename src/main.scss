@@ -149,6 +149,10 @@ article p {
   }
 }
 .refbud {
+  &:focus {
+    outline: none;
+    background: #e0e0e0;
+  }
   &.quote {
     border-left: 2px solid #a0a0a0;
     padding-left: 0.5em;
