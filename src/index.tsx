@@ -120,6 +120,26 @@ class Branch extends Bud {
     this.activeTab = 0
   }
 
+  getNextQuote() {
+    return new Branch(
+      this.sources,
+      this.displayMode === 'quote'
+        ? 'card'
+        : this.displayMode === 'card'
+        ? 'bud' : 'bud'
+    )
+  }
+
+  getPrevQuote() {
+    return new Branch(
+      this.sources,
+      this.displayMode === 'bud'
+        ? 'card'
+        : this.displayMode === 'card'
+        ? 'quote' : 'quote'
+    )
+  }
+
   getLength() {
     return this.displayMode === 'quote' ? 1 : this.sources.length
   } 
@@ -127,6 +147,7 @@ class Branch extends Bud {
   toHtmlNode() {
     const div = document.createElement('div')
     div.dataset.jerryType = 'blackbox'
+    div.setAttribute('tabIndex', '-1')
     div.setAttribute('contentEditable', 'false')
     div.classList.add('branch')
     div.classList.add(this.displayMode)
@@ -527,7 +548,7 @@ export class Page {
     return newModel
   }
 
-  requote(bud: RefBud, node: Element, dir = 1): Page {
+  requote(bud: RefBud | Branch, node: Element, dir = 1): Page {
       const article = this.root.querySelector('article')
       const jerry = new Jerry(article)
       const leaf = jerry.getNodeAddress(node)
