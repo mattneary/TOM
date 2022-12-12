@@ -12,12 +12,12 @@ that links are represented as annotations rather than as a type of node. For
 the sake of clarity, we will refer to TOM-style links as *ribbons*. For the same
 reason, we'll call TOM-style nodes *buds*.
 
-- Second, TOM allows for a degree of nested structure, but it's more limited than
-the DOM in this regard. Where the DOM consists of a hierarchy of nodes within
-nodes, a TOM page only accepts three types of buds. TOM buds are either
-TextBuds, RefBuds, or Branches—where RefBuds are used to transclude URLs or
-other TOM pages and Branches display a set of buds in parallel. In this way,
-TOM pages still have recursive structure, but in a narrower sense. To make page
+- Second, TOM allows for a degree of nested structure, but it's more limited
+than the DOM in this regard. Where the DOM consists of a hierarchy of nodes
+within nodes, a TOM page only accepts two types of buds. TOM buds are either
+TextBuds or RefBuds—where RefBuds are used to transclude fragments, URLs or
+other TOM pages that are stored as ribbon attachments. In this way, TOM pages
+still have recursive structure, but in a narrower sense. To make page
 transclusion possible, the TOM renderer must be given a lookup function that
 will return the data for a page given its id.
 
@@ -44,12 +44,14 @@ functionality that makes high-level editing operations super easy.  Copy and
 paste are an important part of the workflow, and these operations have
 comprehensive support in TOM.  But we add a set of related operations in
 addition to these more conventional ones. There's key commands for elide (`.`),
-punch out (`>`), stack (`|`), and split (`&`) as well as their counterparts
-expand/pull in/unstack/join. These toggles manipulate the buds and ribbons of a
+punch out (`>`), stack (`|`) as well as their counterparts
+expand/pull in/unstack. These toggles manipulate the buds and ribbons of a
 page in interesting ways: elide moves selected text into a ribbon and replaces
 it with "...", punch out creates a new page and a corresponding RefBud from a
-selection, stack creates a branch from selected buds, and split turns a branch
-into a single bud with its siblings pushed out into a ribbon. 
+selection, and stack gathers selected buds as attachments to a RefBud. Elide also
+enables more general behavior: for example, a URL and the text fragment to which it
+is connected can be swapped, the URL edited, and then the pair swapped back to
+its original configuration.
 
 ## usage
 
@@ -57,14 +59,14 @@ into a single bud with its siblings pushed out into a ribbon.
 type Page = {
   id: string
   buds: Bud[]
-  ribbons: Ribbon[]
+  connections: Ribbon[]
+  sources: Ribbon[]
 }
 
-type Bud = TextBud | RefBud | Branch
+type Bud = TextBud | RefBud
 type TextBud = {type: 'text', content: string}
 type DisplayMode = 'bud' | 'card' | 'quote'
-type RefBud = {type: 'ref', src: string, displayMode: DisplayMode}
-type Branch = {type: 'branch', buds: Bud[], displayMode: DisplayMode}
+type RefBud = {type: 'ref', displayMode: DisplayMode}
 
 type Ribbon = {
   origin: Interval
